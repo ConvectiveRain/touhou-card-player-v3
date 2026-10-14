@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   CanvasMargin, CanvasSpacing, CardWidthPercentageMax, CardWidthPercentageMin, HoverRaiseHeight,
-  MaxCardWidthTotalPercentage, MaxDeckColumns, canvasPositionToDeckPosition, clampCardWidthPercentage,
-  computeBoardLayout, computeDeckColumnLayout, computeDeckColumnVisibility, computeUnusedCardsStrip,
-  getCardTransitionString, growCanvasHeight, mapDeckSide, maxCardWidthPercentageForDeck,
-  toDeckCardPosition, unusedCardsStripMaxWidth,
+  MaxCardWidthTotalPercentage, MaxDeckColumns, canvasPositionToDeckPosition, cardWidthPercentageLimit,
+  clampCardWidthPercentage, computeBoardLayout, computeDeckColumnLayout, computeDeckColumnVisibility,
+  computeUnusedCardsStrip, getCardTransitionString, growCanvasHeight, mapDeckSide,
+  maxCardWidthPercentageForDeck, toDeckCardPosition, unusedCardsStripMaxWidth,
 } from "./geometry";
 import type { BoardLayoutInput } from "./geometry";
 
@@ -376,6 +376,25 @@ describe("small helpers", () => {
     expect(maxCardWidthPercentageForDeck(MaxDeckColumns) * MaxDeckColumns).toBeCloseTo(
       MaxCardWidthTotalPercentage,
     );
+  });
+
+  it("stops the larger card button at the tighter of the user ceiling and the deck's row", () => {
+    // a narrow deck leaves the user ceiling in charge
+    expect(cardWidthPercentageLimit(1)).toBeCloseTo(CardWidthPercentageMax);
+    expect(cardWidthPercentageLimit(2)).toBeCloseTo(CardWidthPercentageMax);
+    // once the deck's share drops below the ceiling it becomes the limit the button stops at
+    expect(cardWidthPercentageLimit(3)).toBeCloseTo(MaxCardWidthTotalPercentage / 3);
+    expect(cardWidthPercentageLimit(MaxDeckColumns)).toBeCloseTo(
+      MaxCardWidthTotalPercentage / MaxDeckColumns,
+    );
+    expect(cardWidthPercentageLimit(3)).toBeLessThan(CardWidthPercentageMax);
+
+    // the limit is what clamping converges to, so a card at the limit cannot be grown
+    for (const columns of [1, 2, 3, 8, MaxDeckColumns]) {
+      const limit = cardWidthPercentageLimit(columns);
+      expect(clampCardWidthPercentage(limit, columns)).toBeCloseTo(limit);
+      expect(clampCardWidthPercentage(limit + 0.01, columns)).toBeCloseTo(limit);
+    }
   });
 
   it("keeps a card width inside both the user range and the deck's row", () => {

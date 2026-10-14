@@ -38,14 +38,19 @@ export function maxCardWidthPercentageForDeck(deckColumns: number): number {
 }
 
 /**
+ * The widest card this deck allows: the user-settable ceiling, or the deck's own share when that
+ * is tighter. Also the value the "larger card" button stops at.
+ */
+export function cardWidthPercentageLimit(deckColumns: number): number {
+  return Math.min(CardWidthPercentageMax, maxCardWidthPercentageForDeck(deckColumns));
+}
+
+/**
  * Fits a card width to the deck it is shown in: first the range the user may pick, then the
  * narrower range a wide deck leaves. Idempotent, so re-applying it after the deck changed is safe.
  */
 export function clampCardWidthPercentage(percentage: number, deckColumns: number): number {
-  return Math.min(
-    clamp(percentage, CardWidthPercentageMin, CardWidthPercentageMax),
-    maxCardWidthPercentageForDeck(deckColumns),
-  );
+  return clamp(percentage, CardWidthPercentageMin, cardWidthPercentageLimit(deckColumns));
 }
 
 export const CardTransitionProperties = [

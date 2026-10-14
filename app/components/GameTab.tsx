@@ -9,7 +9,8 @@ import {
 import { GameJudgeState } from "../types/GameTypes";
 import { isCheatReally } from "../types/Cheat";
 import {
-  computeBoardLayout, computeDeckColumnLayout, computeDeckColumnVisibility, growCanvasHeight,
+  cardWidthPercentageLimit, computeBoardLayout, computeDeckColumnLayout,
+  computeDeckColumnVisibility, growCanvasHeight,
 } from "../lib/geometry";
 import { CardLayer } from "./game/CardLayer";import { CheatOverlay } from "./game/CheatOverlay";
 import { CollectedPiles } from "./game/CollectedPiles";
@@ -206,6 +207,7 @@ function GameTab(props: GameTabProps) {
           visibility={deckColumnVisibility}
           isMusicFilteredByDeck={session.isMusicFilteredByDeck}
           cardWidthPercentage={session.cardWidthPercentage}
+          cardWidthPercentageLimit={cardWidthPercentageLimit(judge.deckColumns)}
           cardCanGrow={layout.deckRight + layout.canvasMargin + 150 + layout.canvasMargin <= layout.canvasWidth}
           deckRows={judge.deckRows}
           maxDeckRows={5}

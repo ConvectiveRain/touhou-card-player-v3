@@ -24,7 +24,7 @@ import { clamp } from "../../lib/math";
 import { GameTimerDisplay } from "./GameTimerDisplay";
 import type { GameTimerDisplayHandle } from "./GameTimerDisplay";
 import type { BoardLayout, DeckColumnVisibility } from "../../lib/geometry";
-import { computeDeckColumnLayout } from "../../lib/geometry";
+import { CardWidthPercentageMin, computeDeckColumnLayout } from "../../lib/geometry";
 import { RefObject } from "react";
 
 /**
@@ -61,6 +61,8 @@ export interface DeckColumnControlsProps {
   visibility: DeckColumnVisibility;
   isMusicFilteredByDeck: boolean;
   cardWidthPercentage: number;
+  /** The widest this deck allows, which is narrower than the user ceiling on a wide deck. */
+  cardWidthPercentageLimit: number;
   cardCanGrow: boolean;
   deckRows: number;
   maxDeckRows: number;
@@ -79,8 +81,8 @@ export interface DeckColumnControlsProps {
 }
 
 export function DeckColumnControls({
-  layout, visibility, isMusicFilteredByDeck, cardWidthPercentage, cardCanGrow,
-  deckRows, maxDeckRows, deckIsFull, deckIsEmpty,
+  layout, visibility, isMusicFilteredByDeck, cardWidthPercentage, cardWidthPercentageLimit,
+  cardCanGrow, deckRows, maxDeckRows, deckIsFull, deckIsEmpty,
   startButton, opponentButton,
   onCardSmaller, onCardLarger, onFilterByDeck, onRandomFill, onClearDeck,
   onShuffleDeck, onRemoveRow, onAddRow,
@@ -93,7 +95,7 @@ export function DeckColumnControls({
       <GameButton
         text={GetLocalizedString(Localization.GameCardSmaller)}
         onClick={onCardSmaller}
-        disabled={cardWidthPercentage <= 0.04}
+        disabled={cardWidthPercentage <= CardWidthPercentageMin}
         sx={absoluteAt(x, positions.cardSmaller)}
       >
         <WestRounded />
@@ -102,7 +104,7 @@ export function DeckColumnControls({
       <GameButton
         text={GetLocalizedString(Localization.GameCardLarger)}
         onClick={onCardLarger}
-        disabled={cardWidthPercentage >= 0.40 || !cardCanGrow}
+        disabled={cardWidthPercentage >= cardWidthPercentageLimit || !cardCanGrow}
         sx={absoluteAt(x, positions.cardLarger)}
       >
         <EastRounded />
