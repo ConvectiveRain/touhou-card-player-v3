@@ -3,32 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import type { GameJudge } from "../../types/GameJudge";
 import {
-  CardWidthPercentageMax, CardWidthPercentageMin, DefaultCardWidthPercentage,
-  maxCardWidthPercentageForDeck,
+  DefaultCardWidthPercentage, clampCardWidthPercentage,
 } from "../../lib/geometry";
-import { clamp } from "../../lib/math";
 import { loadGameSetting, saveGameSetting } from "../../lib/persistence";
 
 /** How much one press of the smaller/larger button changes the card width. */
 const CardWidthStep = 0.01;
 
-/**
- * Applies both limits to a card width: the user-settable range, and the narrower range a wide
- * deck leaves, so that the whole row still fits in the canvas.
- */
-function clampCardWidth(percentage: number, deckColumns: number): number {
-  return Math.min(
-    clamp(percentage, CardWidthPercentageMin, CardWidthPercentageMax),
-    maxCardWidthPercentageForDeck(deckColumns),
-  );
-}
-
 export type BoardSetting = {
   cardWidthPercentage: number;
   cardSmaller: () => void;
   cardLarger: () => void;
-  /** Re-applies the deck-width limit after the deck gained a column. */
-  refitCardWidth: () => void;
 };
 
 /**
@@ -40,16 +25,23 @@ export function useBoardSetting(judge: GameJudge, markJudgeChanged: () => void):
   const [cardWidthPercentage, setCardWidthPercentage] = useState<number>(DefaultCardWidthPercentage);
 
   const cardSmaller = useCallback(() => {
-    setCardWidthPercentage((current) => clampCardWidth(current - CardWidthStep, judge.deckColumns));
+    setCardWidthPercentage((current) => clampCardWidthPercentage(current - CardWidthStep, judge.deckColumns));
   }, [judge]);
 
   const cardLarger = useCallback(() => {
-    setCardWidthPercentage((current) => clampCardWidth(current + CardWidthStep, judge.deckColumns));
+    setCardWidthPercentage((current) => clampCardWidthPercentage(current + CardWidthStep, judge.deckColumns));
   }, [judge]);
 
   const refitCardWidth = useCallback(() => {
-    setCardWidthPercentage((current) => clampCardWidth(current, judge.deckColumns));
+    setCardWidthPercentage((current) => clampCardWidthPercentage(current, judge.deckColumns));
   }, [judge]);
+
+  // The deck can be resized from the outside too - a peer sends its deck size over `syncSettings`,
+  // and a reconnecting client applies it in a sync payload - so the cards follow the judge's column
+  // count wherever the change came from.
+  useEffect(() => {
+    refitCardWidth();
+  }, [judge.deckColumns, refitCardWidth]);
 
   // restore the saved board shape on first mount
   useEffect(() => {
@@ -58,7 +50,7 @@ export function useBoardSetting(judge: GameJudge, markJudgeChanged: () => void):
     if (typeof stored.cardWidthPercentage === "number") {
       // the saved width was chosen for the saved deck size, which may be wider than this build allows
       setCardWidthPercentage(
-        clampCardWidth(stored.cardWidthPercentage, stored.deckColumns ?? judge.deckColumns),
+        clampCardWidthPercentage(stored.cardWidthPercentage, stored.deckColumns ?? judge.deckColumns),
       );
     }
     if (typeof stored.deckRows === "number") {
@@ -81,5 +73,5 @@ export function useBoardSetting(judge: GameJudge, markJudgeChanged: () => void):
     });
   }, [cardWidthPercentage, judge.deckRows, judge.deckColumns]);
 
-  return { cardWidthPercentage, cardSmaller, cardLarger, refitCardWidth };
+  return { cardWidthPercentage, cardSmaller, cardLarger };
 }

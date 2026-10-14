@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  CanvasMargin, CanvasSpacing, CardWidthPercentageMin, HoverRaiseHeight, MaxCardWidthTotalPercentage,
-  MaxDeckColumns, canvasPositionToDeckPosition, computeBoardLayout, computeDeckColumnLayout,
-  computeDeckColumnVisibility, computeUnusedCardsStrip, getCardTransitionString,
-  growCanvasHeight, mapDeckSide, maxCardWidthPercentageForDeck, toDeckCardPosition,
-  unusedCardsStripMaxWidth,
+  CanvasMargin, CanvasSpacing, CardWidthPercentageMax, CardWidthPercentageMin, HoverRaiseHeight,
+  MaxCardWidthTotalPercentage, MaxDeckColumns, canvasPositionToDeckPosition, clampCardWidthPercentage,
+  computeBoardLayout, computeDeckColumnLayout, computeDeckColumnVisibility, computeUnusedCardsStrip,
+  getCardTransitionString, growCanvasHeight, mapDeckSide, maxCardWidthPercentageForDeck,
+  toDeckCardPosition, unusedCardsStripMaxWidth,
 } from "./geometry";
 import type { BoardLayoutInput } from "./geometry";
 
@@ -376,5 +376,24 @@ describe("small helpers", () => {
     expect(maxCardWidthPercentageForDeck(MaxDeckColumns) * MaxDeckColumns).toBeCloseTo(
       MaxCardWidthTotalPercentage,
     );
+  });
+
+  it("keeps a card width inside both the user range and the deck's row", () => {
+    // two columns leave room for the full user range, so only that range applies
+    expect(clampCardWidthPercentage(0.20, 2)).toBeCloseTo(0.20);
+    expect(clampCardWidthPercentage(0.60, 2)).toBeCloseTo(CardWidthPercentageMax);
+    expect(clampCardWidthPercentage(0.01, 2)).toBeCloseTo(CardWidthPercentageMin);
+
+    // wide deck: the deck's share is the tighter limit, so the row never overflows
+    expect(clampCardWidthPercentage(0.20, MaxDeckColumns)).toBeCloseTo(
+      MaxCardWidthTotalPercentage / MaxDeckColumns,
+    );
+    expect(clampCardWidthPercentage(0.30, 10) * 10).toBeCloseTo(MaxCardWidthTotalPercentage);
+    expect(clampCardWidthPercentage(CardWidthPercentageMin, MaxDeckColumns))
+      .toBeCloseTo(CardWidthPercentageMin);
+
+    // re-applying it never drifts, so a repeated deck change cannot shrink the cards away
+    const once = clampCardWidthPercentage(0.35, 12);
+    expect(clampCardWidthPercentage(once, 12)).toBeCloseTo(once);
   });
 });

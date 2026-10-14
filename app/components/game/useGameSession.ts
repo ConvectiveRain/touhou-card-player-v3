@@ -201,7 +201,6 @@ export function useGameSession(props: GameSessionProps): GameSession {
   }, []);
 
   const boardSetting = useBoardSetting(judge, markJudgeChanged);
-  const { refitCardWidth } = boardSetting;
   const unusedCards = useUnusedCards({
     data, musicSelection, playingOrder, judge, judgeVersion,
     draggedCard: dragInfo?.cardInfo ?? null,
@@ -678,10 +677,8 @@ export function useGameSession(props: GameSessionProps): GameSession {
   const addColumn = useCallback(() => {
     if (judge.deckColumns >= MaxDeckColumns) { return; }
     judge.adjustDeckSize(judge.deckRows, judge.deckColumns + 1, SendToAll);
-    // one more column shrinks the width a card may take, so the row cannot overflow
-    refitCardWidth();
     markJudgeChanged();
-  }, [judge, markJudgeChanged, refitCardWidth]);
+  }, [judge, markJudgeChanged]);
 
   const removeColumn = useCallback(() => {
     if (judge.deckColumns <= 1) { return; }

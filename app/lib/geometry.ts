@@ -1,5 +1,6 @@
 import { CardAspectRatio } from "../types/Configs";
 import { DeckPosition } from "../types/GameTypes";
+import { clamp } from "./math";
 
 /**
  * Pure geometry for the game board. Everything here is a function of its inputs, so the
@@ -34,6 +35,17 @@ export const MaxCardWidthTotalPercentage = 0.85;
  */
 export function maxCardWidthPercentageForDeck(deckColumns: number): number {
   return MaxCardWidthTotalPercentage / deckColumns;
+}
+
+/**
+ * Fits a card width to the deck it is shown in: first the range the user may pick, then the
+ * narrower range a wide deck leaves. Idempotent, so re-applying it after the deck changed is safe.
+ */
+export function clampCardWidthPercentage(percentage: number, deckColumns: number): number {
+  return Math.min(
+    clamp(percentage, CardWidthPercentageMin, CardWidthPercentageMax),
+    maxCardWidthPercentageForDeck(deckColumns),
+  );
 }
 
 export const CardTransitionProperties = [
