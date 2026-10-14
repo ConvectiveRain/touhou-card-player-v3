@@ -15,6 +15,8 @@ import { PagePRNG } from "./types/PagePrng";
 import { useWindowWidth } from "./lib/useWindowWidth";
 import { useGameData } from "./lib/useGameData";
 import { useMusicPlayer } from "./lib/useMusicPlayer";
+import { playbackToggleAction } from "./lib/playbackActions";
+import { usePlaybackHotkeys } from "./lib/usePlaybackHotkeys";
 
 /** Width below which the secondary tabs are hidden to keep the header on one line. */
 const SmallScreenWidth = 600;
@@ -113,6 +115,21 @@ export default function Home() {
   });
 
   const isOnSmallerScreen = useWindowWidth() < SmallScreenWidth;
+
+  // `[` / `]` / space drive the transport, but only where the transport is on screen: the
+  // Player and List tabs, and never while a match owns the music.
+  const playbackHotkeysEnabled = !player.inGame
+    && (activeTab === PlayerTabIndex || activeTab === ListTabIndex);
+  const togglePlay = () => {
+    const action = playbackToggleAction(player.playbackState);
+    if (action === "play") { player.play(); }
+    else if (action === "pause") { player.pause(); }
+  };
+  usePlaybackHotkeys(playbackHotkeysEnabled, {
+    onPrevious: player.previous,
+    onNext: player.next,
+    onTogglePlay: togglePlay,
+  });
 
   // The About tab previews music, so the out-of-game countdown is suspended while it is open and
   // restored when the user leaves. Driving it from the active tab keeps the setting untouched by

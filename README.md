@@ -44,8 +44,10 @@ app/
     format.ts              clock formatting
     persistence.ts         every localStorage key, with validation
     features.ts            ?g / ?r2 / ?locale / ?cheatcode feature flags, read once
+    playbackActions.ts     transport rules shared by the buttons and the hotkeys
     useGameData.ts         character + music dataset, the user's selection, dataset actions
     useMusicPlayer.ts      audio engine: playback, transport, countdown bell
+    usePlaybackHotkeys.ts  `[` / `]` / space on the Player and List tabs
     useAudioClock.ts       follows a track's position where it is displayed
     useVersion.ts          the render nudge used by the mutable models
     useWindowWidth.ts      shared responsive hook
@@ -106,6 +108,9 @@ Four conventions are worth knowing when making changes:
 ## Playing
 - **Play tab**: Queue characters; Click any card in the queue to temporarily disable it without losing your ordering.
 - **List tab**: Rapidly filter and jump between every available character for quick playing.
+- **Hotkeys**: On the Play and List tabs, `[` plays the previous song, `]` the next one, and
+  `space` toggles play/pause. They stay inactive while a text field has focus and while a match
+  is running.
 
 ## Config
 - Swap between multiple card collections to your liking.

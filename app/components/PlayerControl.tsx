@@ -12,6 +12,7 @@ import { MonospaceFontFamily } from "./Theme";
 import { cheatSanitize } from "../types/Cheat";
 import { formatClock } from "../lib/format";
 import { useAudioClock } from "../lib/useAudioClock";
+import { playbackToggleAction } from "../lib/playbackActions";
 
 export interface PlayerControlProps {
   showSlider?: boolean;
@@ -66,6 +67,7 @@ export default function PlayerControl({
   // The position ticks several times a second, so it is subscribed to here instead of being
   // kept in a store that every mounted tab would re-render for.
   const currentTime = useAudioClock(audioRef);
+  const toggleAction = playbackToggleAction(playbackState);
 
   const buttons = (
     <Stack direction="row" spacing={4} alignItems="center">
@@ -75,8 +77,8 @@ export default function PlayerControl({
         <LeftIcon fontSize="large"/>
       </PlaybackIconButton>
       <PlaybackIconButton 
-        disabled={playbackState === PlaybackState.CountingDown}
-        onClick={playbackState !== PlaybackState.Playing ? onPlay : onPause}
+        disabled={toggleAction === null}
+        onClick={toggleAction === "play" ? onPlay : onPause}
       >
         {playbackState !== PlaybackState.Playing ? <PlayIcon fontSize="large"/> : <PauseIcon fontSize="large"/>}
       </PlaybackIconButton>
