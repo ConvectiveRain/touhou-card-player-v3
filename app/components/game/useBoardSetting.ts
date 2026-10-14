@@ -23,6 +23,10 @@ export type BoardSetting = {
  */
 export function useBoardSetting(judge: GameJudge, markJudgeChanged: () => void): BoardSetting {
   const [cardWidthPercentage, setCardWidthPercentage] = useState<number>(DefaultCardWidthPercentage);
+  // False until the stored shape has been applied. The persist effect must not run before that:
+  // it would write the pre-restore defaults over the stored setting, and the mount effect would
+  // then read that clobbered value back.
+  const [restored, setRestored] = useState<boolean>(false);
 
   const cardSmaller = useCallback(() => {
     setCardWidthPercentage((current) => clampCardWidthPercentage(current - CardWidthStep, judge.deckColumns));
@@ -46,32 +50,36 @@ export function useBoardSetting(judge: GameJudge, markJudgeChanged: () => void):
   // restore the saved board shape on first mount
   useEffect(() => {
     const stored = loadGameSetting();
-    if (!stored) { return; }
-    if (typeof stored.cardWidthPercentage === "number") {
-      // the saved width was chosen for the saved deck size, which may be wider than this build allows
-      setCardWidthPercentage(
-        clampCardWidthPercentage(stored.cardWidthPercentage, stored.deckColumns ?? judge.deckColumns),
-      );
+    if (stored) {
+      if (typeof stored.cardWidthPercentage === "number") {
+        // the saved width was chosen for the saved deck size, which may be wider than this build allows
+        setCardWidthPercentage(
+          clampCardWidthPercentage(stored.cardWidthPercentage, stored.deckColumns ?? judge.deckColumns),
+        );
+      }
+      if (typeof stored.deckRows === "number") {
+        judge.deckRows = stored.deckRows;
+      }
+      if (typeof stored.deckColumns === "number") {
+        judge.deckColumns = stored.deckColumns;
+      }
+      judge.adjustDeckSize(judge.deckRows, judge.deckColumns, { send: false, except: null });
+      markJudgeChanged();
     }
-    if (typeof stored.deckRows === "number") {
-      judge.deckRows = stored.deckRows;
-    }
-    if (typeof stored.deckColumns === "number") {
-      judge.deckColumns = stored.deckColumns;
-    }
-    judge.adjustDeckSize(judge.deckRows, judge.deckColumns, { send: false, except: null });
-    markJudgeChanged();
+    setRestored(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // persist, skipping the defaults so "unset" stays distinguishable
+  // persist once the stored shape has been restored, skipping the defaults so "unset" stays
+  // distinguishable
   useEffect(() => {
+    if (!restored) { return; }
     saveGameSetting({
       cardWidthPercentage,
       deckRows: judge.deckRows,
       deckColumns: judge.deckColumns,
     });
-  }, [cardWidthPercentage, judge.deckRows, judge.deckColumns]);
+  }, [restored, cardWidthPercentage, judge.deckRows, judge.deckColumns]);
 
   return { cardWidthPercentage, cardSmaller, cardLarger };
 }
