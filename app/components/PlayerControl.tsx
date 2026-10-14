@@ -15,6 +15,8 @@ import { useAudioClock } from "../lib/useAudioClock";
 
 export interface PlayerControlProps {
   showSlider?: boolean;
+  /** Hides the elapsed/total clock; the track length can hint which song is playing. */
+  hideTimes?: boolean;
   /** The shared <audio> element; the live position is read from it. */
   audioRef: RefObject<HTMLAudioElement | null>;
   duration: number;
@@ -53,6 +55,7 @@ function formatTime(seconds: number): string {
 
 export default function PlayerControl({
   showSlider,
+  hideTimes,
   audioRef,
   duration,
   playbackState,
@@ -87,7 +90,7 @@ export default function PlayerControl({
   }
   return <Stack direction="column" spacing={1} alignItems="center" width="100%" justifyContent="center">
     <Stack direction="row" spacing={3} alignItems="center" width="100%" justifyContent="center">
-      <Typography fontFamily={MonospaceFontFamily}>{cheatSanitize(formatTime(currentTime))}</Typography>
+      {!hideTimes && <Typography fontFamily={MonospaceFontFamily}>{cheatSanitize(formatTime(currentTime))}</Typography>}
       <Slider value={currentTime} 
         min={0} max={duration} 
         sx={{ width: "clamp(0px, 40%, 300px)" }}
@@ -98,7 +101,7 @@ export default function PlayerControl({
           }
         }}
       />
-      <Typography fontFamily={MonospaceFontFamily}>{cheatSanitize(formatTime(duration))}</Typography>
+      {!hideTimes && <Typography fontFamily={MonospaceFontFamily}>{cheatSanitize(formatTime(duration))}</Typography>}
     </Stack>
     <Stack direction="row" spacing={3} alignItems="center" width="100%" justifyContent="center">
       <VolumeDown></VolumeDown>

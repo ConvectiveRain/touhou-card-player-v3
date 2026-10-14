@@ -52,6 +52,9 @@ export default function PlayerTab({
 
   const [hoveringCharacterId, setHoveringCharacterId] = useState<CharacterId | null>(null);
   const [playbackDurationString, setPlaybackDurationString] = useState<string>("0");
+  // Judge-free mode: everything that reveals the answer (card, music, character and the
+  // upcoming queue) is not rendered, so the player who operates the panel can play blind.
+  const [displayHidden, setDisplayHidden] = useState<boolean>(false);
   const windowWidth = useWindowWidth();
 
   useEffect(() => {
@@ -65,7 +68,7 @@ export default function PlayerTab({
   const placeholderCardSource = data.getAnyCardSource();
 
   const upcomingCards = [];
-  {
+  if (!displayHidden) {
     const singleCardWp = Math.min(windowWidth * 0.2, 150); // wp = width percentage
     const cardInGroupOverlapWp = singleCardWp * 0.8;
     const groupOverlapWp = singleCardWp * 0.2;
@@ -171,61 +174,64 @@ export default function PlayerTab({
           width: "100%",
         }}
       >
-        <Stack direction="row" spacing={0}
-          sx={{
-            width: "100%",
-            display: "flex",
-            position: "relative",
-            height: "auto",
-          }}
-        >
-          {/* Place holder card to keep height */}
-          <Box sx={{ visibility: "hidden", width: "100%" }}>
-            <MusicCardDisplay
-              cardCollection={data.cardCollection}
-              cardSources={[placeholderCardSource]}
-              title={"Placeholder"}
-              album={"Placeholder"}
-              characterId={"Placeholder"}
-              expanded={false}
-            />
-          </Box>
-          {playingOrder.map((characterId, index) => {
-            const characterData = data.characterConfigs.get(characterId);
-            const cardSources = characterData?.card || [];
-            let musicInfo = musicInfoFor(data, musicSelection, characterId);
-            if (!musicInfo) {
-              musicInfo = {
-                characterId: characterId,
-                title: "Unknown Title",
-                album: "Unknown Album",
+        {!displayHidden && (
+          <Stack direction="row" spacing={0}
+            sx={{
+              width: "100%",
+              display: "flex",
+              position: "relative",
+              height: "auto",
+            }}
+          >
+            {/* Place holder card to keep height */}
+            <Box sx={{ visibility: "hidden", width: "100%" }}>
+              <MusicCardDisplay
+                cardCollection={data.cardCollection}
+                cardSources={[placeholderCardSource]}
+                title={"Placeholder"}
+                album={"Placeholder"}
+                characterId={"Placeholder"}
+                expanded={false}
+              />
+            </Box>
+            {playingOrder.map((characterId, index) => {
+              const characterData = data.characterConfigs.get(characterId);
+              const cardSources = characterData?.card || [];
+              let musicInfo = musicInfoFor(data, musicSelection, characterId);
+              if (!musicInfo) {
+                musicInfo = {
+                  characterId: characterId,
+                  title: "Unknown Title",
+                  album: "Unknown Album",
+                }
               }
-            }
-            return (
-              <Box
-                key={characterId}
-                sx={{ 
-                  width: "100%",
-                  position: "absolute",
-                  transform: `translateX(${(index - currentIndex) * 100}%)`,
-                  transition: "transform 0.3s ease-in-out",
-                }}
-              >
-                <MusicCardDisplay
-                  cardCollection={data.cardCollection}
+              return (
+                <Box
                   key={characterId}
-                  cardSources={cardSources}
-                  title={musicInfo.title}
-                  album={musicInfo.album}
-                  characterId={characterId}
-                  expanded={index === currentIndex}
-                />
-              </Box>
-            );
-          })}
-        </Stack>
+                  sx={{ 
+                    width: "100%",
+                    position: "absolute",
+                    transform: `translateX(${(index - currentIndex) * 100}%)`,
+                    transition: "transform 0.3s ease-in-out",
+                  }}
+                >
+                  <MusicCardDisplay
+                    cardCollection={data.cardCollection}
+                    key={characterId}
+                    cardSources={cardSources}
+                    title={musicInfo.title}
+                    album={musicInfo.album}
+                    characterId={characterId}
+                    expanded={index === currentIndex}
+                  />
+                </Box>
+              );
+            })}
+          </Stack>
+        )}
         <PlayerControl
           showSlider={true}
+          hideTimes={displayHidden}
           audioRef={audioRef}
           duration={duration}
           playbackState={playbackState}
@@ -237,21 +243,23 @@ export default function PlayerTab({
           onPlay={onPlay}
           onPause={onPause}
         ></PlayerControl>
-        <Stack direction="column" spacing={1} width="100%">
-          <Typography variant="body1" color="text.secondary" fontFamily={NoFontFamily}>
-            {GetLocalizedString(Localization.PlayerTabUpcoming)}
-          </Typography>
-          <Stack direction="row" spacing={0}
-            sx={{
-              width: "100%",
-              display: "flex",
-              position: "relative",
-              height: "auto",
-            }}
-          >
-            {upcomingCards}
+        {!displayHidden && (
+          <Stack direction="column" spacing={1} width="100%">
+            <Typography variant="body1" color="text.secondary" fontFamily={NoFontFamily}>
+              {GetLocalizedString(Localization.PlayerTabUpcoming)}
+            </Typography>
+            <Stack direction="row" spacing={0}
+              sx={{
+                width: "100%",
+                display: "flex",
+                position: "relative",
+                height: "auto",
+              }}
+            >
+              {upcomingCards}
+            </Stack>
           </Stack>
-        </Stack>
+        )}
         <Stack direction="column" spacing={1} width="100%">
           <Stack direction="row" spacing={1} width="100%" alignItems="center" justifyContent="center">
             <Button variant="outlined" sx={{ width: "8rem", fontFamily: NoFontFamily }} color="secondary" onClick={() => {
@@ -282,6 +290,11 @@ export default function PlayerTab({
                 });
               }}
             >{GetLocalizedString(Localization.PlayerTabCountdown)}</Button>
+            <Button
+              variant={displayHidden ? "contained" : "outlined"}
+              sx={{ width: "8rem", fontFamily: NoFontFamily }}
+              onClick={() => { setDisplayHidden(!displayHidden); }}
+            >{GetLocalizedString(Localization.PlayerTabHideDisplay)}</Button>
           </Stack>
           <Stack direction="row" paddingTop={1} spacing={1} width="100%" alignItems="center" justifyContent="center">
             <TextField
