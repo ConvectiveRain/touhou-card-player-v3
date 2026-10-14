@@ -26,14 +26,23 @@ class GlobalData {
   presets: MusicPresets;
   cardCollection: string;
 
-  reconstruct() {
-    const r = new GlobalData();
-    r.characterConfigs = this.characterConfigs;
-    r.sources = this.sources;
-    r.cardSourcePrefix = this.cardSourcePrefix;
-    r.presets = this.presets;
-    r.cardCollection = this.cardCollection;
-    return r;
+  /** A copy with a different card collection. The dataset itself is shared. */
+  withCardCollection(cardCollection: string): GlobalData {
+    const copy = new GlobalData();
+    copy.characterConfigs = this.characterConfigs;
+    copy.sources = this.sources;
+    copy.cardSourcePrefix = this.cardSourcePrefix;
+    copy.presets = this.presets;
+    copy.cardCollection = cardCollection;
+    return copy;
+  }
+
+  /** A copy whose music sources are the given payload. */
+  withFetchedSources(jsonData: unknown): GlobalData {
+    const copy = this.withCardCollection(this.cardCollection);
+    copy.sources = new Map(this.sources);
+    copy.applyFetchedSources(jsonData);
+    return copy;
   }
 
   constructor() {
@@ -109,73 +118,10 @@ enum PlaybackState {
   TimeoutPause,
 }
 
-class Playback {
-  currentTime: number;
-  duration: number;
-
-  constructor() {
-    this.currentTime = 0;
-    this.duration = 0;
-  }
-}
-
 type PlaybackSetting = {
   countdown: boolean;
   randomStartPosition: boolean;
   playbackDuration: number;
-}
-
-function getMusicInfo(musicName: string): { title: string; album: string } {
-  let albumName = ""
-  // album is the string before first "/"
-  albumName = musicName.substring(0, musicName.indexOf('/'));
-  // get last "/" and last "."
-  // and take the between as musicName
-  if (musicName !== undefined) {
-    const lastSlash = musicName.lastIndexOf('/');
-    const lastDot = musicName.lastIndexOf('.');
-    musicName = musicName.substring(lastSlash + 1, lastDot);
-  }
-  // remove author
-  const authors = [
-    "黄昏フロンティア・上海アリス幻樂団",
-    "上海アリス幻樂団",
-    "ZUN",
-    "あきやまうに",
-    "黄昏フロンティア"
-  ]
-  for (let i = 0; i < authors.length; i++) {
-    const author = authors[i];
-    if (musicName.startsWith(author + " - ")) {
-      musicName = musicName.substring(author.length + 3);
-    }
-  }
-  // if starts with a number + ".", remove it
-  if (musicName.match(/^\d+\./)) {
-    musicName = musicName.substring(musicName.indexOf('.') + 1);
-    // if a space follows, remove it
-    if (musicName.startsWith(" ")) {
-      musicName = musicName.substring(1);
-    }
-  }
-  return {
-    title: musicName,
-    album: albumName
-  }
-}
-
-function getMusicInfoFromCharacterId(globalData: GlobalData, musicSelection: MusicSelectionMap, characterId: CharacterId): MusicInfo | null {
-  const characterConfig = globalData.characterConfigs.get(characterId);
-  if (!characterConfig) {
-    return null;
-  }
-  const musicIndex = musicSelection.get(characterId) || 0;
-  const musicId = characterConfig.musics[musicIndex];
-  const musicInfo = getMusicInfo(musicId);
-  return {
-    characterId: characterId,
-    ...musicInfo
-  } as MusicInfo;
 }
 
 function createPlayingOrder(
@@ -214,6 +160,6 @@ export type {
 };
 
 export { 
-  GlobalData , Playback, PlaybackState,
-  getMusicInfo, getMusicInfoFromCharacterId, createPlayingOrder
+  GlobalData, PlaybackState,
+  createPlayingOrder
 };

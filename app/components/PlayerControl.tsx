@@ -1,4 +1,5 @@
-import { CharacterId, GlobalData, Playback, PlaybackState } from "../types/Configs";
+import { RefObject } from "react";
+import { PlaybackState } from "../types/Configs";
 import { IconButton, Slider, Stack, Typography } from "@mui/material";
 import {
   SkipNextRounded as RightIcon,
@@ -9,17 +10,17 @@ import {
 } from "@mui/icons-material";
 import { MonospaceFontFamily } from "./Theme";
 import { cheatSanitize } from "../types/Cheat";
+import { formatClock } from "../lib/format";
+import { useAudioClock } from "../lib/useAudioClock";
 
 export interface PlayerControlProps {
   showSlider?: boolean;
-  data: GlobalData;
-  currentCharacterId: CharacterId;
-  playback: Playback;
+  /** The shared <audio> element; the live position is read from it. */
+  audioRef: RefObject<HTMLAudioElement | null>;
+  duration: number;
   playbackState: PlaybackState;
   volume: number;
-  setPlayback: (playback: Playback) => void;
   setPlaybackTime?: (time: number) => void;
-  setPlaybackState: (state: PlaybackState) => void;
   setVolume: (volume: number) => void;
   onNextMusic: () => void;
   onPreviousMusic: () => void;
@@ -47,19 +48,22 @@ function PlaybackIconButton({ disabled, onClick, children }:
 }
 
 function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  return formatClock(seconds);
 }
 
 export default function PlayerControl({
   showSlider,
-  playback,
+  audioRef,
+  duration,
   playbackState,
   onNextMusic, onPreviousMusic, onPlay, onPause,
   setPlaybackTime,
   volume, setVolume,
 }: PlayerControlProps) {
+  // The position ticks several times a second, so it is subscribed to here instead of being
+  // kept in a store that every mounted tab would re-render for.
+  const currentTime = useAudioClock(audioRef);
+
   const buttons = (
     <Stack direction="row" spacing={4} alignItems="center">
       <PlaybackIconButton 
@@ -83,9 +87,9 @@ export default function PlayerControl({
   }
   return <Stack direction="column" spacing={1} alignItems="center" width="100%" justifyContent="center">
     <Stack direction="row" spacing={3} alignItems="center" width="100%" justifyContent="center">
-      <Typography fontFamily={MonospaceFontFamily}>{cheatSanitize(formatTime(playback.currentTime))}</Typography>
-      <Slider value={playback.currentTime} 
-        min={0} max={playback.duration} 
+      <Typography fontFamily={MonospaceFontFamily}>{cheatSanitize(formatTime(currentTime))}</Typography>
+      <Slider value={currentTime} 
+        min={0} max={duration} 
         sx={{ width: "clamp(0px, 40%, 300px)" }}
         onChange={(_, value) => {
           const newTime = Array.isArray(value) ? value[0] : value;
@@ -94,7 +98,7 @@ export default function PlayerControl({
           }
         }}
       />
-      <Typography fontFamily={MonospaceFontFamily}>{cheatSanitize(formatTime(playback.duration))}</Typography>
+      <Typography fontFamily={MonospaceFontFamily}>{cheatSanitize(formatTime(duration))}</Typography>
     </Stack>
     <Stack direction="row" spacing={3} alignItems="center" width="100%" justifyContent="center">
       <VolumeDown></VolumeDown>

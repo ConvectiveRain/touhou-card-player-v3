@@ -2,44 +2,13 @@ import { Box, Paper, Stack, SxProps } from "@mui/material";
 import { CardAspectRatio } from "../types/Configs";
 import { PagePRNG } from "../types/PagePrng";
 import Image from "next/image";
-import { memo, useEffect } from "react";
+import { memo } from "react";
 import { isCheat, randomColor } from "../types/Cheat";
+import { CardBackgroundState } from "../lib/cardState";
+import { cardImageUrl } from "../lib/cardImages";
+import { getFeatures } from "../lib/features";
 
-let fromR2: boolean | null = null;
-const CardR2Prefix = "https://r2bucket-touhou.hgjertkljw.org/";
-const CardLocalPrefix = "./";
-
-const CardCollectionPrefix: Map<string, string> = new Map([
-	["dairi-sd", "cards/"],
-	["dairi", "cards-dairi/"],
-	["enbu", "cards-enbu/"],
-	["enbu-dolls", "cards-enbu-dolls/"],
-	["thbwiki-sd", "cards-thwiki/"],
-	["zun", "cards-zun/"],
-]);
-
-let staticGlitch: boolean | null = null;
-function glitch(): boolean {
-	if (staticGlitch === null) {
-		// get a "g" from query params
-		if (typeof window === "undefined") { return false; }
-		const params = new URLSearchParams(window.location.search);
-		const g = params.get("g");
-		staticGlitch = (g !== null);
-	}
-	return staticGlitch;
-}
-
-export enum CardBackgroundState {
-	Placeholder,
-	Normal,
-	Hover,
-	Disabled,
-	DisabledHover,
-	Selected,
-	Correct,
-	Incorrect
-}
+export { CardBackgroundState };
 
 export interface CharacterCardProps {
 	cardCollection: string;
@@ -96,19 +65,7 @@ function CharacterCardImpl({
 	...props
 }: CharacterCardProps) {
 
-	useEffect(() => {
-		const params = new URLSearchParams(window.location.search);
-		const r2 = params.get("r2");
-		fromR2 = r2!==undefined && r2 !== null;
-	}, []);
-
-	const getR2Prefix = () => {
-		if (fromR2) {
-			return CardR2Prefix;
-		} else {
-			return CardLocalPrefix;
-		}
-	}
+	const features = getFeatures();
 
 	if (backgroundState === undefined) {
 		backgroundState = CardBackgroundState.Normal;
@@ -167,7 +124,7 @@ function CharacterCardImpl({
 	if (upsideDown) {
 		rotation = 180;
 	}
-	if (glitch() && !isPlaceholder) {
+	if (features.glitch && !isPlaceholder) {
 		const r = PagePRNG.hash(cardSource) % 10 - 5;
 		rotation += r;
 	}
@@ -181,7 +138,6 @@ function CharacterCardImpl({
 			transform += " translateY(10%)";
 		}
 	}
-	const cardSourcePrefix = CardCollectionPrefix.get(cardCollection) || CardCollectionPrefix.get("dairi-sd");
 	return (
 		<Paper elevation={paperElevation} variant={paperVariant}
 			sx={{
@@ -215,7 +171,7 @@ function CharacterCardImpl({
 						}}
 					>
 						<Image
-							src={getR2Prefix() + cardSourcePrefix + cardSource}
+							src={cardImageUrl(cardCollection, cardSource, features.useR2)}
 							alt="Character Card"
 							draggable="false"
 							unoptimized

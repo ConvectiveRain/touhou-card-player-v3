@@ -1,14 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import PlayerTab from "./components/PlayerTab";
-import { 
-  CharacterId, 
-  createPlayingOrder, GlobalData, 
-  MusicSelectionMap, 
-  MusicUniqueId, Playback, PlaybackSetting, 
-  PlaybackState 
-} from "./types/Configs";
+import { CharacterId } from "./types/Configs";
 import { Box, Button, CssBaseline, Divider, Paper, Stack } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { NoFontFamily, theme } from "./components/Theme";
@@ -16,10 +10,55 @@ import CustomTabs from "./components/CustomTabs";
 import ListTab from "./components/ListTab";
 import GameTab from "./components/GameTab";
 import ConfigTab from "./components/ConfigTab";
-import { DefaultMusicSource, MusicSources } from "./types/Consts";
-import { GetLocalizedString, Localization, setLocale } from "./types/Localization";
+import { GetLocalizedString, Localization } from "./types/Localization";
 import { PagePRNG } from "./types/PagePrng";
-import { enableCheat, isCheatString } from "./types/Cheat";
+import { useWindowWidth } from "./lib/useWindowWidth";
+import { useGameData } from "./lib/useGameData";
+import { useMusicPlayer } from "./lib/useMusicPlayer";
+
+/** Width below which the secondary tabs are hidden to keep the header on one line. */
+const SmallScreenWidth = 600;
+
+// The tab order used by both the header buttons and the tab container.
+const PlayerTabIndex = 0;
+const ListTabIndex = 1;
+const ConfigTabIndex = 2;
+const AboutTabIndex = 3;
+
+/**
+ * A header button. Tabs pass `onClick` that selects them; the extra buttons (Alice, Source code)
+ * just run their own action.
+ */
+function TabButton({
+  label, selected, disabled, color, contained, underlinedText, minWidth, onClick,
+}: {
+  label: string;
+  selected: boolean;
+  disabled?: boolean;
+  color?: "primary" | "secondary" | "success" | "error" | "info" | "warning";
+  contained?: boolean;
+  underlinedText?: boolean;
+  minWidth?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <Button
+      variant={contained !== undefined ? (contained ? "contained" : "text") : (selected ? "contained" : "text")}
+      onClick={onClick}
+      disabled={disabled}
+      color={color || "primary"}
+      size="small"
+      sx={{
+        fontFamily: NoFontFamily,
+        padding: 0.5,
+        minWidth: minWidth ?? "4em",
+        textDecoration: underlinedText ? "underline" : "none",
+      }}
+    >
+      {label}
+    </Button>
+  );
+}
 
 function TabContainer({
   children
@@ -30,7 +69,7 @@ function TabContainer({
     sx={{ width: "100%", paddingLeft: 2, paddingRight: 2 }}
   >
     <Paper
-      sx={{ 
+      sx={{
         padding: 2, width: "100%", overflow: "hidden",
         backgroundColor: theme.custom.mainTabBackground
       }}
@@ -40,556 +79,78 @@ function TabContainer({
   </Box>
 }
 
+const AliceTabLabels = [
+  "Alice is the best!",
+  "We need more Alice!",
+  "All hail Alice!",
+  "Alice is right!",
+  "Alice fumofumo~",
+];
+const AliceCharacterId = "アリス・マーガトロイド";
+
 export default function Home() {
-
-  // refs
-  const audioElementRef = useRef<HTMLAudioElement | null>(null);
-  const countdownAudioElementRef = useRef<HTMLAudioElement | null>(null);
-  const audioUpdateTimestampRef = useRef<number>(0);
-
-  // states
-  const [globalDataLoadedFlag, setGlobalDataLoadedFlag] = useState<boolean>(false);
-  const [globalData, setGlobalData] = useState<GlobalData>(new GlobalData());
   const [activeTab, setActiveTab] = useState<number>(0);
-  const [playback, setPlayback] = useState<Playback>(new Playback());
-  const [musicSelection, setMusicSelection] = useState<MusicSelectionMap>(new Map());
-  const [currentCharacterId, setCurrentCharacterId] = useState<CharacterId>("");
-  const [characterTemporaryDisabled, setCharacterTemporaryDisabled] = useState<Map<CharacterId, boolean>>(new Map());
-  const [playingOrder, setPlayingOrder] = useState<Array<CharacterId>>([]);
-  const [playbackSetting, setPlaybackSetting] = useState<PlaybackSetting>({ 
-    countdown: false, randomStartPosition: false, playbackDuration: 0
-  })
-  const [pauseTimeoutHandle, setPauseTimeoutHandle] = useState<NodeJS.Timeout | null>(null);
-  const [playbackState, setPlaybackState] = useState<PlaybackState>(PlaybackState.Stopped);
-  const [outOfGameUseCountdown, setOutOfGameUseCountdown] = useState<boolean>(false);
-  const [inGame, setInGame] = useState<boolean>(false);
-  const [windowWidth, setWindowWidth] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1200);
-  const [volume, setVolume] = useState<number>(1.0);
-  const nextSongPRNGSeedRef = useRef<number>(Math.floor(Math.random() * 2147483647));
-  const isOnSmallerScreen = windowWidth < 600;
-  const [musicStartTimestamp, setMusicStartTimestamp] = useState<number>(0);
 
-  // region utility funcs
-  const getMusicId = (character: CharacterId): MusicUniqueId | null => {
-    const selection = musicSelection.get(character);
-    if (selection === undefined || selection === -1) {
-      return null;
-    }
-    const characterConfig = globalData.characterConfigs.get(character);
-    if (!characterConfig) {
-      return null;
-    }
-    const musicList = characterConfig.musics;
-    if (selection < 0 || selection >= musicList.length) {
-      return null;
-    }
-    const musicId = musicList[selection];
-    return musicId;
-  }
+  const gameData = useGameData();
+  const {
+    globalData, ready,
+    musicSelection, setMusicSelection,
+    playingOrder, setPlayingOrder,
+    characterTemporaryDisabled, setCharacterTemporaryDisabled,
+    currentCharacterId, setCurrentCharacterId,
+  } = gameData;
 
-  const setNextSongPRNGSeed = (seed: number) => {
-    nextSongPRNGSeedRef.current = seed;
-  }
-  
-  const getMusicSourceUrl = (character: CharacterId): string | null => {
-    const musicId = getMusicId(character);
-    if (musicId === null) {
-      return null;
-    }
-    const sourceUrl = globalData.sources.get(musicId);
-    return sourceUrl || null;
-  }
+  const player = useMusicPlayer({
+    globalData,
+    musicSelection,
+    playingOrder,
+    characterTemporaryDisabled,
+    currentCharacterId,
+    setCurrentCharacterId,
+    setPlayingOrder,
+    setCharacterTemporaryDisabled,
+    ready,
+  });
 
-  const setRandomPlaybackPosition = () => {
-    if (audioElementRef.current && playbackSetting.randomStartPosition) {
-      const duration = audioElementRef.current.duration;
-      if (isNaN(duration) || duration <= 0) {
-        console.log("Audio duration is not available yet.");
-        return;
-      }
-      const random01 = nextSongPRNGSeedRef.current / 2147483647;
-      const randomPosition = (duration < 10) ? 0 : random01 * (duration - 10);
-      console.log("seed=", nextSongPRNGSeedRef.current, " r01=", random01, " duration=", duration, " pos=", randomPosition);
-      audioElementRef.current.currentTime = randomPosition;
-      setPlayback((original) => {
-        return { ...original, currentTime: randomPosition };
-      });
-    }
-  }
+  const isOnSmallerScreen = useWindowWidth() < SmallScreenWidth;
 
-  const setPlaybackTime = (time: number) => {
-    if (audioElementRef.current) {
-      audioElementRef.current.currentTime = time;
-      setPlayback((original) => {
-        return { ...original, currentTime: time };
-      });
-    }
-  }
-
-  const saveToLocalStorage = () => {
-    if (!globalDataLoadedFlag) { return; }
-    // save music selection
-    const selectionObj: { [key: string]: number } = {};
-    musicSelection.forEach((value, key) => {
-      selectionObj[key] = value;
-    });
-    localStorage.setItem("musicSelection", JSON.stringify(selectionObj));
-    // save playing order
-    localStorage.setItem("playingOrder", JSON.stringify(playingOrder));
-    // save character temporary disabled
-    const disabledObj: { [key: string]: boolean } = {};
-    characterTemporaryDisabled.forEach((value, key) => {
-      disabledObj[key] = value;
-    });
-    localStorage.setItem("characterTemporaryDisabled", JSON.stringify(disabledObj));
-    // save current character id
-    localStorage.setItem("currentCharacterId", currentCharacterId);
-  }
-
-  const loadFromLocalStorage = (globalData: GlobalData): boolean => {
-    console.log("Loading from local storage...");
-    // character set
-    const characterSet = new Set<CharacterId>(globalData.characterConfigs.keys());
-    // load music selection
-    const selectionStr = localStorage.getItem("musicSelection");
-    const newSelection: MusicSelectionMap = new Map();
-    let flag = true;
-    if (selectionStr) {
-      const selectionObj = JSON.parse(selectionStr) as { [key: string]: number };
-      for (const key in selectionObj) {
-        if (characterSet.has(key)) {
-          newSelection.set(key, selectionObj[key]);
-        }
-      }
-      if (newSelection.size === 0) { flag = false; }
-    } else { flag = false; }
-    // if some character is not in newSelection, set it to 0
-    for (const charId of characterSet) {
-      if (!newSelection.has(charId)) {
-        newSelection.set(charId, 0);
-      }
-    }
-    // load playing order
-    const newOrder: Array<CharacterId> = [];
-    const orderStr = localStorage.getItem("playingOrder");
-    if (orderStr) {
-      const orderArr = JSON.parse(orderStr) as Array<CharacterId>;
-      for (const charId of orderArr) {
-        if (characterSet.has(charId)) {
-          newOrder.push(charId);
-        }
-      }
-      if (newOrder.length === 0) { flag = false; }
-    } else { flag = false; }
-    // load character temporary disabled
-    const disabledStr = localStorage.getItem("characterTemporaryDisabled");
-    const newDisabled: Map<CharacterId, boolean> = new Map();
-    if (disabledStr) {
-      const disabledObj = JSON.parse(disabledStr) as { [key: string]: boolean };
-      for (const key in disabledObj) {
-        if (characterSet.has(key)) {
-          newDisabled.set(key, disabledObj[key]);
-        }
-      }
-    } else { flag = false; }
-    // load current character id
-    const currentCharId = localStorage.getItem("currentCharacterId");
-    if (!currentCharId || !characterSet.has(currentCharId)) {
-      flag = false;
-    }
-    if (flag) {
-      setMusicSelection(newSelection);
-      setPlayingOrder(newOrder);
-      setCharacterTemporaryDisabled(newDisabled);
-      setCurrentCharacterId(currentCharId as CharacterId);
-    } 
-    return flag;
-  }
-
-  // region effects
-
-  // fetch data
+  // The About tab previews music, so the out-of-game countdown is suspended while it is open and
+  // restored when the user leaves. Driving it from the active tab keeps the setting untouched by
+  // navigation itself.
   useEffect(() => {
-    const load = async () => {
-      const fetchJson = async (path: string) => {
-        const resp = await fetch(path);
-        return resp.json();
-      };
-
-      let musicSourcesUrl = DefaultMusicSource.url;
-      const storedMusicSourceKey = localStorage.getItem("musicSourceKey");
-      if (storedMusicSourceKey) {
-        const source = MusicSources.find((source) => source.key === storedMusicSourceKey);
-        if (source) {
-          musicSourcesUrl = source.url;
-        }
-      }
-
-      const [characters, sources, presets] = await Promise.all([
-        fetchJson("character.json"),
-        fetchJson(musicSourcesUrl),
-        fetchJson("idpresets.json"),
-      ]);
-
-      setGlobalData((original) => { 
-        original.applyFetchedCharacters(characters); 
-        original.applyFetchedSources(sources);
-        original.applyFetchedPresets(presets);
-        return original;
-      });
-
-      setGlobalDataLoadedFlag(true);
-
-      const loadedFlags = loadFromLocalStorage(globalData);
-
-      if (!loadedFlags) {
-      // set music selection to 0 for all characters
-        const initialSelection: MusicSelectionMap = new Map();
-        for (const charId in characters) {
-          initialSelection.set(charId, 0);
-        }
-        setMusicSelection(initialSelection);
-
-        // create playing order
-        const order = createPlayingOrder(globalData, musicSelection, characterTemporaryDisabled, false);
-        setPlayingOrder(order);
-
-        // set current character to the first one
-        setCurrentCharacterId(order.length > 0 ? order[0] : "");
-      }
-    };
-
-    load().catch((err) => {
-      console.error("Failed to load public data", err);
-    });
-
-    // get locale from query params
-    const params = new URLSearchParams(window.location.search);
-    const localeParam = params.get("locale");
-    let localeSet = false;
-    if (localeParam === "en" || localeParam === "zh") {
-      console.log("Found locale in query params:", localeParam);
-      setLocale(localeParam);
-      localeSet = true;
+    if (activeTab === AboutTabIndex) {
+      player.suspendOutOfGameCountdown();
+    } else {
+      player.restoreOutOfGameCountdown();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
-    if (!localeSet) {
-      // detect browser locale
-      const browserLang = navigator.language || navigator.languages[0] || "en";
-      if (browserLang.startsWith("zh")) {
-        console.log("Detected browser locale:", browserLang);
-        setLocale("zh");
-      } else {
-        console.log("Detected browser locale:", browserLang);
-        setLocale("en");
-      }
+  const selectAliceIfQueued = () => {
+    if (!playingOrder.includes(AliceCharacterId)) { return; }
+    setCurrentCharacterId(AliceCharacterId);
+    if (characterTemporaryDisabled.get(AliceCharacterId)) {
+      const nextDisabled = new Map(characterTemporaryDisabled);
+      nextDisabled.set(AliceCharacterId, false);
+      setCharacterTemporaryDisabled(nextDisabled);
     }
-
-    // try to get a "cheatcode" from query params
-    const cheatParam = params.get("cheatcode");
-    if (cheatParam && isCheatString(cheatParam)) {
-      enableCheat();
-      console.log("Cheat mode enabled!");
-    }
-
-  }, []);
-
-  // set volume
-  useEffect(() => {
-    if (audioElementRef.current) {
-      audioElementRef.current.volume = volume;
-    }
-    if (countdownAudioElementRef.current) {
-      countdownAudioElementRef.current.volume = volume;
-    }
-  }, [volume]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowWidth(window.innerWidth);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    }
-  }, []);
-
-  // update audio source when currentCharacterId
-  useEffect(() => {
-    if (currentCharacterId === "") {
-      return;
-    }
-    const sourceUrl = getMusicSourceUrl(currentCharacterId);
-    if (audioElementRef.current) {
-      if (sourceUrl) {
-        audioElementRef.current.src = sourceUrl;
-        audioElementRef.current.load();
-      } else {
-        audioElementRef.current.src = "";
-      }
-      if (playbackSetting.countdown && (
-        playbackState === PlaybackState.Playing ||
-        playbackState === PlaybackState.TimeoutPause
-      )) {
-        // play countdown audio first
-        if (countdownAudioElementRef.current) {
-          countdownAudioElementRef.current.currentTime = 0;
-          countdownAudioElementRef.current.play();
-        }
-        setPlaybackState(PlaybackState.CountingDown);
-      }
-    }
-  }, [currentCharacterId]);
-
-  // save data to local storage when changes
-  useEffect(() => {
-    saveToLocalStorage();
-  }, [musicSelection, playingOrder, characterTemporaryDisabled, currentCharacterId]);
-
-  // region handlers
-
-  const resetPauseTimeout = () => {
-    if (pauseTimeoutHandle) {
-      clearTimeout(pauseTimeoutHandle);
-      setPauseTimeoutHandle(null);
-    }
-    if (playbackSetting.playbackDuration > 0) {
-      const timeoutHandle = setTimeout(() => {
-        if (audioElementRef.current) {
-          audioElementRef.current.pause();
-        }
-        setPlaybackState(PlaybackState.TimeoutPause);
-        setPauseTimeoutHandle(null);
-      }, playbackSetting.playbackDuration * 1000);
-      setPauseTimeoutHandle(timeoutHandle);
-    }
-  }
-
-  const handleCountdownEnded = () => {
-    if (audioElementRef.current) {
-      if (playbackSetting.randomStartPosition) {
-        setRandomPlaybackPosition();
-      }
-      if (audioElementRef.current) {
-        // check if the music is already played
-        let playedDuration = 0;
-        const ranges = audioElementRef.current.played;
-        for (let i = 0; i < ranges.length; i++) {
-          playedDuration += ranges.end(i) - ranges.start(i);
-        }
-        audioElementRef.current.play().then(() => {
-          if (playedDuration < 0.02) {
-            console.log("CountdownEnd: Music started at ", Date.now());
-            setMusicStartTimestamp(Date.now());
-          }
-        });
-        resetPauseTimeout();
-        setPlaybackState(PlaybackState.Playing);
-      }
-    }
-  }
-
-  const handlePlay = () => {
-    if (audioElementRef.current) {
-      audioElementRef.current.play();
-      setPlaybackState(PlaybackState.Playing);
-    }
-  };
-
-  const handlePause = () => {
-    if (pauseTimeoutHandle) {
-      clearTimeout(pauseTimeoutHandle);
-      setPauseTimeoutHandle(null);
-    }
-    if (countdownAudioElementRef.current) {
-      countdownAudioElementRef.current.pause();
-      countdownAudioElementRef.current.currentTime = 0;
-    }
-    if (audioElementRef.current) {
-      audioElementRef.current.pause();
-      setPlaybackState(PlaybackState.Stopped);
-    }
-  }
-
-  const handleGamePauseMusic = () => {
-    if (pauseTimeoutHandle) {
-      clearTimeout(pauseTimeoutHandle);
-      setPauseTimeoutHandle(null);
-    }
-    if (countdownAudioElementRef.current) {
-      countdownAudioElementRef.current.pause();
-    }
-    if (audioElementRef.current) {
-      audioElementRef.current.pause();
-      // Use timeoutPause so that when player clicks next/play, it can resume
-      setPlaybackState(PlaybackState.TimeoutPause);
-    }
-  }
-
-  const handleAudioLoadedData = () => {
-    // Auto play when data is loaded
-    if ((
-      playbackState === PlaybackState.Playing || 
-      playbackState === PlaybackState.TimeoutPause
-    ) && audioElementRef.current) {
-      if (playbackSetting.randomStartPosition) {
-        setRandomPlaybackPosition();
-      }
-      audioElementRef.current.play().then(() => {
-        console.log("Audio loaded: Music started at ", Date.now());
-        setMusicStartTimestamp(Date.now());
-      });
-      resetPauseTimeout();
-      setPlaybackState(PlaybackState.Playing);
-    }
-  }
-
-  const handleNextMusic = () => {
-    // find next whose (1) selection is not -1 (2) not temporarily disabled
-    const currentIndex = playingOrder.indexOf(currentCharacterId);
-    const totalCharacters = playingOrder.length;
-    for (let offset = 1; offset <= totalCharacters; offset++) {
-      const nextIndex = (currentIndex + offset) % totalCharacters;
-      const nextCharId = playingOrder[nextIndex];
-      const selection = musicSelection.get(nextCharId);
-      const isDisabled = characterTemporaryDisabled.get(nextCharId);
-      if (selection !== undefined && selection !== -1 && !isDisabled) {
-        setCurrentCharacterId(nextCharId);
-        break;
-      }
-    }
-  }
-
-  const handlePreviousMusic = () => {
-    // find previous whose (1) selection is not -1 (2) not temporarily disabled
-    const currentIndex = playingOrder.indexOf(currentCharacterId);
-    const totalCharacters = playingOrder.length;
-    for (let offset = 1; offset <= totalCharacters; offset++) {
-      const prevIndex = (currentIndex - offset + totalCharacters) % totalCharacters;
-      const prevCharId = playingOrder[prevIndex];
-      const selection = musicSelection.get(prevCharId);
-      const isDisabled = characterTemporaryDisabled.get(prevCharId);
-      if (selection !== undefined && selection !== -1 && !isDisabled) {
-        setCurrentCharacterId(prevCharId);
-        break;
-      }
-    }
-  }
-
-  // returns the new playing order
-  const handleGameStart = (order: Array<CharacterId> | null): Array<CharacterId> => {
-    const newTemporaryDisabled = new Map<CharacterId, boolean>();
-    const newOrder = order ?? createPlayingOrder(
-      globalData, musicSelection, newTemporaryDisabled, true
-    );
-    setCharacterTemporaryDisabled(newTemporaryDisabled);
-    setPlayingOrder(newOrder);
-    setCurrentCharacterId(newOrder.length > 0 ? newOrder[newOrder.length - 1] : "");
-    if (audioElementRef.current) {
-      audioElementRef.current.pause();
-    }
-    setPlaybackState(PlaybackState.Stopped);
-    setInGame(true);
-    return newOrder;
-  }
-
-  const handleGameEnd = () => {
-    setInGame(false);
-    if (audioElementRef.current) {
-      audioElementRef.current.pause();
-    }
-    setPlaybackState(PlaybackState.Stopped);
-    if (pauseTimeoutHandle) {
-      clearTimeout(pauseTimeoutHandle);
-      setPauseTimeoutHandle(null);
-    }
-    if (countdownAudioElementRef.current) {
-      countdownAudioElementRef.current.pause();
-      countdownAudioElementRef.current.currentTime = 0;
-    }
-  }
-
-  const playCountdownAudio = () => {
-    if (audioElementRef.current) {
-      audioElementRef.current.pause();
-    }
-    if (countdownAudioElementRef.current) {
-      countdownAudioElementRef.current.currentTime = 0;
-      countdownAudioElementRef.current.play();
-    }
-  }
-
-  // region render
-  const tabButton = (
-    id: number, name: string, 
-    onClick?: () => void, 
-    disabled?: boolean,
-    color?: "primary" | "secondary" | "success" | "error" | "info" | "warning",
-    overrideOnClick?: () => void,
-    contained?: boolean,
-    underlinedText?: boolean,
-  ) => {
-    return (
-      <Button
-        key={name}
-        variant={contained !== undefined ? (contained ? "contained" : "text") : (activeTab === id ? "contained" : "text")}
-        onClick={overrideOnClick ? overrideOnClick : () => {
-          setActiveTab(id);
-          if (onClick) onClick();
-        }}
-        disabled={disabled}
-        color={color || "primary"}
-        size="small"
-        sx={{
-          fontFamily: NoFontFamily,
-          padding: 0.5,
-          minWidth: (color !== "success" || name === "Alice!") ? "4em" : undefined,
-          textDecoration: underlinedText ? "underline" : "none",
-        }}
-      >
-        {name}
-      </Button>
-    );
-  }
-
-  const reloadOutOfGameCountdown = () => {
-    setPlaybackSetting((original) => {
-      return { ...original, countdown: outOfGameUseCountdown };
-    });
   }
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <div style={{display: "none"}}>
-        <audio id="audio-element" ref={audioElementRef}
-          onLoadedData={handleAudioLoadedData}
-          onLoadedMetadata={
-            () => {
-              // set playback.duration
-              if (audioElementRef.current) {
-                setPlayback({...playback, duration: audioElementRef.current!.duration});
-              }
-            }
-          }
-          onTimeUpdate={
-            () => {
-              if (audioElementRef.current) {
-                // don't update too frequently
-                if (Date.now() - audioUpdateTimestampRef.current > 1000) {
-                  audioUpdateTimestampRef.current = Date.now();
-                  setPlayback({
-                    ...playback,
-                    currentTime: audioElementRef.current!.currentTime,
-                  });
-                }
-              }
-            }
-          }
+      <div style={{ display: "none" }}>
+        <audio
+          id="audio-element"
+          ref={player.audioRef}
+          onLoadedData={player.audioElementProps.onLoadedData}
+          onLoadedMetadata={player.audioElementProps.onLoadedMetadata}
         ></audio>
-        <audio id="countdown-audio-element" ref={countdownAudioElementRef}
+        <audio
+          id="countdown-audio-element"
+          ref={player.countdownAudioRef}
           src="Bell3.mp3"
-          onEnded={handleCountdownEnded}
+          onEnded={player.countdownElementProps.onEnded}
         ></audio>
       </div>
       <div><main><Box>
@@ -597,57 +158,59 @@ export default function Home() {
           width: "100%", alignItems: "center", paddingTop: 2,
         }}>
           <Stack direction="row" spacing={0.5}>
-            {tabButton(0, GetLocalizedString(Localization.TabNamePlayer), reloadOutOfGameCountdown, inGame)}
+            <TabButton
+              label={GetLocalizedString(Localization.TabNamePlayer)}
+              selected={activeTab === PlayerTabIndex}
+              disabled={player.inGame}
+              onClick={() => { setActiveTab(PlayerTabIndex); }}
+            />
             <Divider orientation="vertical" flexItem />
-            {tabButton(1, GetLocalizedString(Localization.TabNameList), reloadOutOfGameCountdown, inGame)}
+            <TabButton
+              label={GetLocalizedString(Localization.TabNameList)}
+              selected={activeTab === ListTabIndex}
+              disabled={player.inGame}
+              onClick={() => { setActiveTab(ListTabIndex); }}
+            />
             <Divider orientation="vertical" flexItem />
-            {tabButton(0, 
-              !isOnSmallerScreen ? [
-                "Alice is the best!",
-                "We need more Alice!",
-                "All hail Alice!",
-                "Alice is right!",
-                "Alice fumofumo~",
-              ][PagePRNG.hash("Alice") % 5] : "Alice!",
-              undefined, 
-              inGame, 
-              "success",
-              () => {
-                const targetKey = "アリス・マーガトロイド";
-                const inPlayingOrder = playingOrder.indexOf(targetKey);
-                if (inPlayingOrder !== -1) {
-                  setCurrentCharacterId(targetKey);
-                  if (characterTemporaryDisabled.get(targetKey)) {
-                    setCharacterTemporaryDisabled((original) => {
-                      const newMap = new Map(original);
-                      newMap.set(targetKey, false);
-                      return newMap;
-                    });
-                  }
-                }
-              }, false,
-            )}
+            <TabButton
+              label={!isOnSmallerScreen
+                ? AliceTabLabels[PagePRNG.hash("Alice") % AliceTabLabels.length]
+                : "Alice!"}
+              selected={false}
+              disabled={player.inGame}
+              color="success"
+              contained={false}
+              minWidth={isOnSmallerScreen ? "4em" : undefined}
+              onClick={() => {
+                setActiveTab(PlayerTabIndex);
+                selectAliceIfQueued();
+              }}
+            />
             <Divider orientation="vertical" flexItem />
-            {tabButton(2, GetLocalizedString(Localization.TabNameConfigs), reloadOutOfGameCountdown, inGame)}
+            <TabButton
+              label={GetLocalizedString(Localization.TabNameConfigs)}
+              selected={activeTab === ConfigTabIndex}
+              disabled={player.inGame}
+              onClick={() => { setActiveTab(ConfigTabIndex); }}
+            />
             {!isOnSmallerScreen && <Divider orientation="vertical" flexItem />}
-            {!isOnSmallerScreen && tabButton(3, GetLocalizedString(Localization.TabNameAbout), () => {
-              setOutOfGameUseCountdown(playbackSetting.countdown);
-              setPlaybackSetting((original) => {
-                return { ...original, countdown: false };
-              });
-            })}
-            <Divider orientation="vertical" flexItem />
-            {tabButton(0,
-              GetLocalizedString(Localization.TabNameSourceCode),
-              undefined,
-              false,
-              "primary",
-              () => {
-                window.open("https://github.com/lightbulb128/touhou-card-player-v3", "_blank");
-              },
-              false,
-              true
+            {!isOnSmallerScreen && (
+              <TabButton
+                label={GetLocalizedString(Localization.TabNameAbout)}
+                selected={activeTab === AboutTabIndex}
+                onClick={() => { setActiveTab(AboutTabIndex); }}
+              />
             )}
+            <Divider orientation="vertical" flexItem />
+            <TabButton
+              label={GetLocalizedString(Localization.TabNameSourceCode)}
+              selected={false}
+              contained={false}
+              underlinedText
+              onClick={() => {
+                window.open("https://github.com/lightbulb128/touhou-card-player-v3", "_blank");
+              }}
+            />
           </Stack>
           <CustomTabs activeTab={activeTab} onChange={setActiveTab} innerTabs={[
             <TabContainer key="player-tab">
@@ -657,22 +220,21 @@ export default function Home() {
                 musicSelection={musicSelection}
                 characterTemporaryDisabled={characterTemporaryDisabled}
                 currentCharacterId={currentCharacterId as CharacterId}
-                playback={playback}
-                playbackSetting={playbackSetting}
-                playbackState={playbackState}
-                volume={volume}
-                setPlaybackState={setPlaybackState}
-                setPlayback={setPlayback}
+                audioRef={player.audioRef}
+                duration={player.duration}
+                playbackSetting={player.playbackSetting}
+                playbackState={player.playbackState}
+                volume={player.volume}
                 setCharacterTemporaryDisabled={setCharacterTemporaryDisabled}
                 setPlayingOrder={setPlayingOrder}
                 setCurrentCharacterId={setCurrentCharacterId}
-                setPlaybackSetting={setPlaybackSetting}
-                setPlaybackTime={setPlaybackTime}
-                setVolume={setVolume}
-                onPreviousMusic={handlePreviousMusic}
-                onNextMusic={handleNextMusic}
-                onPlay={handlePlay}
-                onPause={handlePause}
+                setPlaybackSetting={player.setPlaybackSetting}
+                setPlaybackTime={player.setPlaybackTime}
+                setVolume={player.setVolume}
+                onPreviousMusic={player.previous}
+                onNextMusic={player.next}
+                onPlay={player.play}
+                onPause={player.pause}
               ></PlayerTab>
             </TabContainer>,
             <TabContainer key="list-tab">
@@ -684,17 +246,16 @@ export default function Home() {
                 playingOrder={playingOrder}
                 setCurrentCharacterId={setCurrentCharacterId}
                 setCharacterTemporaryDisabled={setCharacterTemporaryDisabled}
-                playback={playback}
-                playbackState={playbackState}
-                volume={volume}
-                setPlayback={setPlayback}
-                setPlaybackState={setPlaybackState}
-                setPlaybackTime={setPlaybackTime}
-                setVolume={setVolume}
-                onNextMusic={handleNextMusic}
-                onPreviousMusic={handlePreviousMusic}
-                onPlay={handlePlay}
-                onPause={handlePause}
+                audioRef={player.audioRef}
+                duration={player.duration}
+                playbackState={player.playbackState}
+                volume={player.volume}
+                setPlaybackTime={player.setPlaybackTime}
+                setVolume={player.setVolume}
+                onNextMusic={player.next}
+                onPreviousMusic={player.previous}
+                onPlay={player.play}
+                onPause={player.pause}
               ></ListTab>
             </TabContainer>,
             <TabContainer key="config-tab">
@@ -703,7 +264,9 @@ export default function Home() {
                 musicSelection={musicSelection}
                 playingOrder={playingOrder}
                 currentCharacterId={currentCharacterId}
-                setGlobalData={setGlobalData}
+                setCardCollection={gameData.setCardCollection}
+                setMusicSource={gameData.setMusicSource}
+                onPreviewStart={player.pause}
                 setMusicSelection={setMusicSelection}
                 setPlayingOrder={setPlayingOrder}
                 setCurrentCharacterId={setCurrentCharacterId}
@@ -716,23 +279,22 @@ export default function Home() {
                 characterTemporaryDisabled={characterTemporaryDisabled}
                 currentCharacterId={currentCharacterId}
                 playingOrder={playingOrder}
-                playback={playback}
-                notifyPauseMusic={handleGamePauseMusic}
-                notifyPlayMusic={handlePlay}
-                playbackState={playbackState}
-                playbackSetting={playbackSetting}
-                volume={volume}
-                musicStartTimestamp={musicStartTimestamp}
-                notifyGameStart={handleGameStart}
-                notifyGameEnd={handleGameEnd}
-                notifyPlayCountdownAudio={playCountdownAudio}
-                setNextSongPRNGSeed={setNextSongPRNGSeed}
+                notifyPauseMusic={player.pauseForGame}
+                notifyPlayMusic={player.play}
+                playbackState={player.playbackState}
+                playbackSetting={player.playbackSetting}
+                volume={player.volume}
+                musicStartTimestamp={player.musicStartTimestamp}
+                notifyGameStart={player.startGame}
+                notifyGameEnd={player.endGame}
+                notifyPlayCountdownAudio={player.playCountdownAudio}
+                setNextSongPRNGSeed={player.setNextSongPRNGSeed}
                 setCurrentCharacterId={setCurrentCharacterId}
                 setPlayingOrder={setPlayingOrder}
                 setCharacterTemporaryDisabled={setCharacterTemporaryDisabled}
                 setMusicSelection={setMusicSelection}
-                setPlaybackSetting={setPlaybackSetting}
-                setVolume={setVolume}
+                setPlaybackSetting={player.setPlaybackSetting}
+                setVolume={player.setVolume}
               ></GameTab>
             </TabContainer>
           ]}>

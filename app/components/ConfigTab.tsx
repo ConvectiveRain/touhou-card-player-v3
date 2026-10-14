@@ -1,7 +1,7 @@
 import { Box, Button, Collapse, Divider, FormControl, Grid, IconButton, MenuItem, Paper, Select, Stack, TextField, Typography } from "@mui/material";
 import { AddRounded, RemoveRounded, Shuffle } from "@mui/icons-material";
-import { CharacterId, getMusicInfo, GlobalData, MusicSelectionMap } from "../types/Configs";
-import { Dispatch, useEffect, useState } from "react";
+import { CharacterId, GlobalData, MusicSelectionMap } from "../types/Configs";
+import { useEffect, useMemo, useState } from "react";
 import { CardCollections, DefaultMusicSource, MusicSources } from "../types/Consts";
 import { CharacterCard } from "./CharacterCard";
 import { PagePRNG } from "../types/PagePrng";
@@ -15,6 +15,8 @@ import { NoFontFamily } from "./Theme";
 import { GetLocalizedString, Localization } from "../types/Localization";
 import Link from "next/link";
 import { cheatSanitize, isCheat } from "../types/Cheat";
+import { loadMusicSourceKey, saveMusicSourceKey } from "../lib/persistence";
+import { parseMusicInfo } from "../lib/music";
 
 interface ConfigDrawerProps {
   title: string;
@@ -81,7 +83,10 @@ export interface ConfigTabProps {
   playingOrder: Array<CharacterId>,
   currentCharacterId: CharacterId,
   
-  setGlobalData: Dispatch<React.SetStateAction<GlobalData>>,
+  setCardCollection: (cardCollection: string) => void,
+  setMusicSource: (url: string) => void,
+  /** Called when the local preview starts, so it does not talk over the main player. */
+  onPreviewStart: () => void,
   setMusicSelection: (selection: MusicSelectionMap) => void,
   setPlayingOrder: (order: Array<CharacterId>) => void,
   setCurrentCharacterId: (charId: CharacterId) => void,
@@ -93,69 +98,70 @@ export default function ConfigTab(props: ConfigTabProps) {
   const [focusedPreset, setFocusedPreset] = useState<string | null>(null);
   const [searchText, setSearchText] = useState<string>("");
   const [randomSeed, setRandomSeed] = useState<number>(1);
-  const prng = new PagePRNG();
-  const cardExampleSources: string[] = [];
-  const sourcePool = new Array<string>();
-  props.data.characterConfigs.forEach((config) => {
-    config.card.forEach((card) => {
-      sourcePool.push(card);
+
+  // Every preset the drawer can apply: the all-enabled default, the saved ones, and one
+  // "disable everything tagged X" entry per tag.
+  const presets: Map<string, MusicSelectionMap> = useMemo(() => {
+    const result: Map<string, MusicSelectionMap> = new Map();
+
+    const defaultSelection: MusicSelectionMap = new Map();
+    props.data.characterConfigs.forEach((_config, characterId) => {
+      defaultSelection.set(characterId, 0);
     });
-  });
-  for (let i = 0; i < 3; i++) {
-    const index = prng.next() % sourcePool.length;
-    cardExampleSources.push(sourcePool[index]);
-  }
-  const presets: Map<string, MusicSelectionMap> = new Map();
-  // add presets from default and tags
-  { // default
-    const selectionMap: MusicSelectionMap = new Map();
-    props.data.characterConfigs.forEach((config, charId) => {
-      selectionMap.set(charId, 0);
-    });
-    presets.set(GetLocalizedString(Localization.ConfigTabPresetDefault), selectionMap);
-  }
-  { // already
+    result.set(GetLocalizedString(Localization.ConfigTabPresetDefault), defaultSelection);
+
     props.data.presets.forEach((selectionMap, name) => {
-      presets.set(name, selectionMap);
+      result.set(name, selectionMap);
     });
-  } 
-  { // tags
-    const tagsSet: Set<string> = new Set();
+
+    const tags = new Set<string>();
     props.data.characterConfigs.forEach((config) => {
-      config.tags.forEach((tag) => {
-        tagsSet.add(tag);
-      });
+      config.tags.forEach((tag) => tags.add(tag));
     });
-    tagsSet.forEach((tag) => {
+    tags.forEach((tag) => {
       const selectionMap: MusicSelectionMap = new Map();
-      props.data.characterConfigs.forEach((config, charId) => {
+      props.data.characterConfigs.forEach((config, characterId) => {
         if (config.tags.includes(tag)) {
-          selectionMap.set(charId, -1);
+          selectionMap.set(characterId, -1);
         }
       });
-      presets.set(GetLocalizedString(Localization.ConfigTabPresetDisable) + tag, selectionMap);
-    }); 
-  }
-  
-  let exampleMusicSource = "";
-  let exampleCharacterId = "";
-  let exampleMusicInfo: {album:string, title:string} | null = null;
-  let exampleMusicSrc = "";
-  if (props.data.characterConfigs !== undefined) {
-    const randomCharacterIndex = (prng.next() + randomSeed) % props.data.characterConfigs.size;
-    // console.log("randomCharacterIndex", randomCharacterIndex);
-    exampleCharacterId = Array.from(props.data.characterConfigs.keys())[randomCharacterIndex];
-    // console.log("exampleCharacterId", exampleCharacterId);
-    const characterConfig = props.data.characterConfigs.get(exampleCharacterId)!;
-    // console.log("characterConfig", characterConfig);
-    if (characterConfig) {
-      const randomMusicIndex = prng.next() % characterConfig.musics.length;
-      exampleMusicSource = characterConfig.musics[randomMusicIndex];
-      exampleMusicInfo = getMusicInfo(exampleMusicSource);
-      exampleMusicSrc = props.data.sources.get(exampleMusicSource) || "";
-      // console.log("exampleMusicSource", exampleMusicSrc);
+      result.set(GetLocalizedString(Localization.ConfigTabPresetDisable) + tag, selectionMap);
+    });
+
+    return result;
+  }, [props.data]);
+
+  // The preview cards and example track are expensive to pick and used to change on every
+  // unrelated re-render. They now only change when the dataset or the shuffle seed does.
+  const examples = useMemo(() => {
+    const prng = new PagePRNG();
+    for (let i = 0; i < randomSeed % 1000; i++) { prng.next(); }
+
+    const cardPool: Array<string> = [];
+    props.data.characterConfigs.forEach((config) => {
+      config.card.forEach((card) => cardPool.push(card));
+    });
+    const characterIds = Array.from(props.data.characterConfigs.keys());
+
+    const cardExamples = cardPool.length > 0
+      ? Array.from({ length: 3 }, () => cardPool[prng.next() % cardPool.length])
+      : [];
+
+    if (characterIds.length === 0) {
+      return { cardExamples, characterId: "", musicSource: "", musicInfo: null, musicSrc: "" };
     }
-  }
+    const characterId = characterIds[prng.next() % characterIds.length];
+    const config = props.data.characterConfigs.get(characterId)!;
+    const musicSource = config.musics[prng.next() % config.musics.length];
+    return {
+      cardExamples,
+      characterId,
+      musicSource,
+      musicInfo: parseMusicInfo(musicSource),
+      musicSrc: props.data.sources.get(musicSource) || "",
+    };
+  }, [props.data, randomSeed]);
+
 
   const applyMusicSelectionPreset = (selectionMap: MusicSelectionMap) => {
     const newMusicSelection: MusicSelectionMap = new Map(props.musicSelection);
@@ -189,13 +195,21 @@ export default function ConfigTab(props: ConfigTabProps) {
     }
   }
 
-  let searched = false;
+  const filteredCharacters = useMemo(() => {
+    const entries = Array.from(props.data.characterConfigs);
+    if (searchText === "") { return entries; }
+    const needle = searchText.toLowerCase();
+    return entries.filter(([charId, config]) => {
+      const searchNames = config.searchNames ?? [charId];
+      return searchNames.some((name) => name.toLowerCase().includes(needle));
+    });
+  }, [props.data, searchText]);
 
   useEffect(() => {
-    // load music source from localStorage
-    const storedMusicSourceKey = localStorage.getItem("musicSourceKey");
+    // restore the last music source the user picked
+    const storedMusicSourceKey = loadMusicSourceKey();
     if (storedMusicSourceKey) {
-      const source = MusicSources.find((source) => source.key === storedMusicSourceKey);
+      const source = MusicSources.find((candidate) => candidate.key === storedMusicSourceKey);
       if (source) {
         setMusicSourceKey(storedMusicSourceKey);
       }
@@ -234,12 +248,7 @@ export default function ConfigTab(props: ConfigTabProps) {
                     <Grid size={4} sx={{display: "flex", justifyContent: "flex-end", alignItems: "center"}}>
                       <Button
                         variant={props.data.cardCollection === key ? "contained" : "outlined"}
-                        onClick={() => {
-                          props.setGlobalData((data) => {
-                            data.cardCollection = key;
-                            return data.reconstruct();
-                          });
-                        }}
+                        onClick={() => { props.setCardCollection(key); }}
                         sx={{
                           height: "2em"
                         }}
@@ -258,7 +267,7 @@ export default function ConfigTab(props: ConfigTabProps) {
                     </Grid>
                     <Grid size={6}>
                       <Stack direction="row" spacing={1} justifyContent="space-between" padding={1}>
-                        {cardExampleSources.map((source, idx) => (
+                        {examples.cardExamples.map((source, idx) => (
                           <CharacterCard
                             key={idx}
                             cardCollection={key}
@@ -295,18 +304,9 @@ export default function ConfigTab(props: ConfigTabProps) {
                       <Button
                         variant={musicSourceKey === key ? "contained" : "outlined"}
                         onClick={() => {
-                          const fetchJson = async (path: string) => {
-                            const resp = await fetch(path);
-                            return resp.json();
-                          };
-                          fetchJson(url).then((jsonData) => {
-                            setMusicSourceKey(key);
-                            props.setGlobalData((data) => {
-                              data.applyFetchedSources(jsonData);
-                              return data.reconstruct();
-                            });
-                          });
-                          localStorage.setItem("musicSourceKey", key);
+                          setMusicSourceKey(key);
+                          saveMusicSourceKey(key);
+                          props.setMusicSource(url);
                         }}
                         sx={{
                           height: "2em",
@@ -332,16 +332,17 @@ export default function ConfigTab(props: ConfigTabProps) {
                           alignItems: "center",
                           display: "flex",
                         }}>
-                          <IconButton sx={{
-                            width: "40px", height: "40px",
-                            flexShrink: 0,
-                          }}>
-                            <Shuffle fontSize="small"
-                              onClick={() => {
-                                const newSeed = Math.floor(prng.next() * 1000000);
-                                setRandomSeed(newSeed);
-                              }}
-                            />
+                          <IconButton
+                            onClick={() => {
+                              // a fresh, well spread seed so the preview really changes
+                              setRandomSeed(Math.floor(Math.random() * 1000000) + 1);
+                            }}
+                            sx={{
+                              width: "40px", height: "40px",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Shuffle fontSize="small" />
                           </IconButton>
                           <Stack direction="column">
                             <Typography variant="body1" color="primary" sx={{
@@ -351,14 +352,14 @@ export default function ConfigTab(props: ConfigTabProps) {
                             }}>
                               {cheatSanitize(GetLocalizedString(Localization.ConfigTabMusicSourceExample))}
                             </Typography>
-                            <Link href={exampleMusicSrc} target="_blank" rel="noopener noreferrer">
+                            <Link href={examples.musicSrc} target="_blank" rel="noopener noreferrer">
                               <Typography variant="body2" color="textSecondary" fontSize="small" sx={{
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
                                 "&:hover": { textDecoration: "underline" }
                               }}>
-                                {cheatSanitize(exampleCharacterId)} / {cheatSanitize(exampleMusicInfo?.title)} ({cheatSanitize(exampleMusicInfo?.album)})
+                                {cheatSanitize(examples.characterId)} / {cheatSanitize(examples.musicInfo?.title)} ({cheatSanitize(examples.musicInfo?.album)})
                               </Typography>
                             </Link>
                           </Stack>
@@ -374,8 +375,9 @@ export default function ConfigTab(props: ConfigTabProps) {
                             style={{
                               width: "100%",
                             }}
-                            src={exampleMusicSrc === "" ? undefined : exampleMusicSrc}
+                            src={examples.musicSrc === "" ? undefined : examples.musicSrc}
                             autoPlay={false}
+                            onPlay={() => { props.onPreviewStart(); }}
                           >
                             Your browser does not support the audio element.
                           </audio>
@@ -447,7 +449,7 @@ export default function ConfigTab(props: ConfigTabProps) {
                         if (musicId != -1) {
                           const nameId = props.data.characterConfigs.get(charId)?.musics[musicId];
                           if (nameId) {
-                            const musicInfo = getMusicInfo(nameId);
+                            const musicInfo = parseMusicInfo(nameId);
                             if (musicInfo) {
                               musicName = musicInfo.title;
                             }
@@ -494,24 +496,7 @@ export default function ConfigTab(props: ConfigTabProps) {
               />
             </Stack>
             <Divider />
-            {Array.from(props.data.characterConfigs).map(([charId, config]) => {
-              if (searchText !== "") {
-                let searchNames = config.searchNames;
-                if (!searchNames) {
-                  searchNames = [charId];
-                }
-                let found = false;
-                for (const name of searchNames) {
-                  if (name.toLowerCase().includes(searchText.toLowerCase())) {
-                    found = true;
-                    break;
-                  }
-                }
-                if (!found) {
-                  return null;
-                }
-              }
-              searched = true;
+            {filteredCharacters.map(([charId, config]) => {
               const selectedMusicId = props.musicSelection.get(charId) ?? 0;
               return (
                 <Stack direction="row" spacing={1} key={charId} alignItems="center" justifyContent="space-between">
@@ -533,7 +518,7 @@ export default function ConfigTab(props: ConfigTabProps) {
                         <Typography variant="body2">{GetLocalizedString(Localization.ConfigTabPresetDisable)}</Typography>
                       </MenuItem>
                       {config.musics.map((musicNameId, index) => {
-                        const musicInfo = getMusicInfo(musicNameId);
+                        const musicInfo = parseMusicInfo(musicNameId);
                         let displayTitle = musicNameId;
                         if (musicInfo) {
                           displayTitle = musicInfo.title;
@@ -549,7 +534,7 @@ export default function ConfigTab(props: ConfigTabProps) {
                 </Stack>
               );
             })}
-            {!searched && (
+            {searchText !== "" && filteredCharacters.length === 0 && (
               <Typography variant="body2" color="textSecondary">
                 No character matched the search.
               </Typography>

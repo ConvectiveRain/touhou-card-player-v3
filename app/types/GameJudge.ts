@@ -1,433 +1,21 @@
 import { RefObject } from "react";
 import { CharacterId, GlobalData, MusicSelectionMap, PlaybackSetting } from "./Configs";
-import Peer, { DataConnection, PeerOptions } from "peerjs";
+import {
+  CardInfo, DeckPosition, DontSend, GameJudgeState, MatchType, PickEvent,
+  Player, PlayerInfo, SendOption, SendToAll,
+} from "./GameTypes";
+import {
+  Event, EventAddCard, EventAdjustDeckSize, EventBroadcastPlayerNames, EventChat,
+  EventClearDeck, EventConfirmNext, EventConfirmStart, EventGive, EventNotifyName,
+  EventPickEvent, EventRemoveCard, EventStopGame, EventSwitchTraditionalMode,
+  EventSyncData, EventSyncNextTurn, EventSyncSettings, EventSyncStart,
+  EventSyncWinnerDetermined, SyncData,
+} from "./GameEvents";
+import { ClientConnection, GamePeer } from "./GamePeer";
 
-// 0 is always the server; >0 is any client or the CPU opponent.
-type Player = number;
-
-
-enum GameJudgeState {
-  SelectingCards,
-  TurnStart,
-  TurnWinnerDetermined,
-  TurnCountdownNext,
-  GameFinished,
-}
-
-class CardInfo {
-  characterId: CharacterId | null;
-  cardIndex: number;
-  constructor(characterId: CharacterId | null, cardIndex: number) {
-    this.characterId = characterId;
-    this.cardIndex = cardIndex;
-  }
-  equals(other: CardInfo): boolean {
-    return this.characterId === other.characterId && this.cardIndex === other.cardIndex;
-  }
-  toKey(): string {
-    return `${this.characterId}-${this.cardIndex}`;
-  }
-}
-
-class PickEvent {
-  timestamp: number;
-  player: Player;
-  cardInfo: CardInfo;
-  deckPosition: DeckPosition;
-
-  constructor(
-    timestamp: number, player: Player, cardInfo: CardInfo, deckPosition: DeckPosition
-  ) {
-    this.timestamp = timestamp;
-    this.player = player;
-    this.cardInfo = cardInfo;
-    this.deckPosition = deckPosition;
-  }
-
-  characterId(): CharacterId {return this.cardInfo.characterId!}
-};
-
-type DeckPosition = {deckIndex: 0 | 1, cardIndex: number}
-
-enum MatchType {
-  None,
-  CPU,
-  Server,
-  Client,
-  Observer,
-}
-
-type EventAddCard = {
-  type: "addCard";
-  cardInfo: CardInfo;
-  deckPosition: DeckPosition;
-};
-
-type EventRemoveCard = {
-  type: "removeCard";
-  deckPosition: DeckPosition;
-};
-
-type EventAdjustDeckSize = {
-  type: "adjustDeckSize";
-  rows: number;
-  columns: number;
-};
-
-type EventConfirmStart = {
-  type: "confirmStart";
-  playerIndex: Player;
-};
-
-type EventConfirmNext = {
-  type: "confirmNext";
-  playerIndex: Player;
-};
-
-type SyncData = {
-  deckRows: number;
-  deckColumns: number;
-  turnWinner: Player | null;
-  order: Array<{ 
-    characterId: CharacterId;
-    musicSelection: number;
-    temporaryDisabled: boolean;
-  }>;
-  pickEvents: Array<PickEvent>;
-  cardStates: Array<{
-    deck: Array<CardInfo>;
-    collected: Array<CardInfo>;
-  }>;
-  currentCharacterId: CharacterId | null;
-};
-
-type EventPickEvent = {
-  type: "pickEvent";
-  pickEvent: PickEvent;
-};
-
-type EventSyncWinnerDetermined = {
-  type: "syncWinnerDetermined";
-  data: SyncData;
-};
-
-type EventSyncStart = {
-  type: "syncStart";
-  data: SyncData;
-  traditionalMode: boolean;
-  randomStartPosition: boolean;
-  playbackDuration: number;
-  rngSeed: number;
-}
-
-type EventChat = {
-  type: "chat";
-  sender: "system" | number;
-  message: string;
-}
-
-type EventRequestSyncData = {
-  type: "requestSyncData";
-};
-
-type EventSyncData = {  
-  type: "syncData";
-  data: SyncData;
-};
-
-type EventSyncNextTurn = {
-  type: "syncNextTurn";
-  data: SyncData;
-  rngSeed: number;
-};
-
-type EventStopGame = {
-  type: "stopGame";
-};
-
-type EventGive = {
-  type: "give";
-};
-
-type EventSwitchTraditionalMode = {
-  type: "switchTraditionalMode";
-  traditionalMode: boolean;
-};
-
-type EventPauseMusic = {
-  type: "pauseMusic";
-};
-
-type EventResumeMusic = {
-  type: "resumeMusic";
-};
-
-type EventFilterMusicByDeck = {
-  type: "filterMusicByDeck";
-};
-
-type EventSyncSettings = {
-  type: "syncSettings";
-  traditionalMode: boolean;
-  randomStartPosition: boolean;
-  playbackDuration: number;
-  deckColumns: number;
-  deckRows: number;
-}
-
-type EventNotifyName = {
-  type: "notifyName";
-  name: string;
-  isObserver: boolean;
-}
-
-type EventBroadcastPlayerNames = {
-  type: "broadcastPlayerNames";
-  settings: Array<{
-    name: string;
-    isObserver: boolean;
-  }>;
-  yourIndex: number;
-  syncData: SyncData;
-  state: GameJudgeState
-}
-
-type EventClearDeck = {
-  type: "clearDeck";
-  player: Player;
-}
-
-type Event = (
-  EventAddCard | 
-  EventAdjustDeckSize | 
-  EventBroadcastPlayerNames |
-  EventChat | 
-  EventClearDeck |
-  EventConfirmNext | 
-  EventConfirmStart | 
-  EventFilterMusicByDeck |
-  EventGive | 
-  EventNotifyName | 
-  EventPauseMusic | 
-  EventPickEvent |
-  EventRemoveCard | 
-  EventRequestSyncData | 
-  EventResumeMusic |
-  EventStopGame | 
-  EventSwitchTraditionalMode | 
-  EventSyncData |
-  EventSyncNextTurn |
-  EventSyncStart | 
-  EventSyncWinnerDetermined | 
-  EventSyncSettings
-); 
-
-class ClientConnection {
-  dataConnection: DataConnection | null;
-  index: number;
-  constructor(dataConnection: DataConnection | null, index: number) {
-    this.dataConnection = dataConnection;
-    this.index = index;
-  }
-}
-
-class GamePeer {
-  peer: Peer | null;
-  dataConnectionToServer: DataConnection | null;
-  dataConnectionToClients: Array<ClientConnection>;
-  refresh: () => void;
-  notifyClientConnected: (id: number) => void;
-  notifyClientDisconnected: (id: number) => void;
-  notifyDisconnectedFromServer: () => void;
-  notifyConnectedToServer: (peer: GamePeer) => void;
-  notifyPeerError: (id: number, message: string) => void;
-
-  constructor() {
-    this.peer = null;
-    this.dataConnectionToServer = null;
-    this.dataConnectionToClients = [];
-    this.refresh = () => {};
-    this.notifyClientConnected = () => {};
-    this.notifyClientDisconnected = (_id: number) => {};
-    this.notifyDisconnectedFromServer = () => {};
-    this.notifyConnectedToServer = () => {};
-    this.notifyPeerError = (_id: number, _message: string) => {};
-  }
-
-  disconnect() {
-    if (this.dataConnectionToServer) {
-      this.dataConnectionToServer.close();
-      this.dataConnectionToServer = null;
-    }
-    for (const conn of this.dataConnectionToClients) { 
-      conn.dataConnection?.close();
-    }
-    this.dataConnectionToClients = [];
-  }
-
-  connectToServer(peerId: string) {
-    this.ensurePeerNotNull();
-    const dataConnection = this.peer!.connect(peerId);
-
-    dataConnection.on("error", (err) => {
-      console.error("[GamePeer] DataConnection error:", err);
-      this.notifyPeerError(0, `Cannot connect to server: ${err}`);
-    });
-
-    dataConnection.on("open", () => {
-      // connected to server
-      if (!this.dataConnectionToServer) {
-        this.dataConnectionToServer = dataConnection;
-        this.notifyConnectedToServer(this);
-        this.refresh();
-      }
-    });
-
-    dataConnection.on("close", () => {
-      dataConnection?.removeAllListeners("data");
-      this.dataConnectionToServer = null;
-      this.notifyDisconnectedFromServer();
-    });
-
-  }
-
-  hasConnectionToServer(): boolean {
-    return this.dataConnectionToServer !== null;
-  }
-
-  ensurePeerNotNull(forceReconstructPeer: boolean = false) {
-    if (this.peer === null || forceReconstructPeer) {
-
-      this.peer = new Peer({ 
-        'iceServers': [
-          { 'urls': 'stun:stun.servcices.mozilla.com' }
-        ], 
-        'sdpSemantics': 'unified-plan' 
-      } as PeerOptions);
-
-      this.peer.on("error", (err) => {
-        console.error("[GamePeer] Peer error:", err);
-        this.notifyPeerError(0, `Peer error: ${err}`);
-      });
-
-      this.peer.on("open", (_: string) => {
-        this.refresh();
-      });
-
-      this.peer.on("connection", (conn: DataConnection) => {
-
-        // connection from clients
-        conn.on("open", () => {
-          this.dataConnectionToClients.push(new ClientConnection(
-            conn, this.dataConnectionToClients.length + 1
-          ));
-          this.notifyClientConnected(this.dataConnectionToClients.length);
-          this.refresh();
-        });
-
-        conn.on("close", () => {
-          let index = 0;
-          for (let i = 0; i < this.dataConnectionToClients.length; i++) {
-            const clientConn = this.dataConnectionToClients[i];
-            if (clientConn.dataConnection === conn) {
-              index = i;
-              break;
-            }
-          }
-          if (index !== -1) {
-            const toRemove = this.dataConnectionToClients[index];
-            this.dataConnectionToClients.splice(index, 1);
-            this.notifyClientDisconnected(toRemove.index);
-          }
-          conn.removeAllListeners("data");
-          this.refresh();
-        });
-
-        console.log("[GamePeer] Incoming connection from peer:", conn.peer);
-        this.refresh();
-
-      });
-
-      this.peer.on("disconnected", () => {
-        this.dataConnectionToServer?.removeAllListeners("data");
-        this.dataConnectionToServer = null;
-        for (const conn of this.dataConnectionToClients) {
-          conn.dataConnection?.removeAllListeners("data");
-        }
-        this.dataConnectionToClients = [];
-        // remove peer so that a new one can be created
-        this.peer = null;
-      });
-
-    }
-  }
-
-  getId(): string {
-    this.ensurePeerNotNull();
-    return this.peer!.id;
-  }
-
-  sendEventToServer(payload: Event) {
-    if (!this.hasConnectionToServer()) {
-      console.warn("No connection to server available to send event:", payload);
-      return;
-    }
-    console.log("server <=", payload);
-    this.dataConnectionToServer!.send(JSON.stringify(payload));
-  }
-
-  sendEventToClient(payload: Event, clientId: number) {
-    const conn = this.dataConnectionToClients.find((c) => c.index === clientId);
-    if (!conn) {
-      console.warn(`No client connection with id ${clientId} available to send event:`, payload);
-      return;
-    }
-    console.log(`client ${clientId} <=`, payload);
-    conn.dataConnection?.send(JSON.stringify(payload));
-  }
-
-  sendEventToClients(payload: Event, exceptId: number | null = null) {
-    if (this.dataConnectionToClients.length === 0) {
-      console.warn("No client connections available to send event:", payload);
-      return;
-    }
-    if (exceptId !== null) {
-      console.log(`clients (except ${exceptId}) <=`, payload);
-    } else {
-      console.log("clients <=", payload);
-    }
-    this.dataConnectionToClients.forEach((conn) => {
-      if (exceptId !== null && conn.index === exceptId) {
-        return;
-      }
-      conn.dataConnection?.send(JSON.stringify(payload));
-    });
-  }
-
-  resetListenerFromClient(ondata: (clientIndex: number, data: unknown) => void) {
-    this.dataConnectionToClients.forEach((dataConnection) => {
-      dataConnection.dataConnection?.removeAllListeners("data");
-      dataConnection.dataConnection?.on("data", (data: unknown) => {
-        ondata(dataConnection.index, data);
-      });
-    });
-  }
-
-  resetListenerFromServer(ondata: (data: unknown) => void) {
-    if (this.dataConnectionToServer) {
-      this.dataConnectionToServer.removeAllListeners("data");
-      this.dataConnectionToServer.on("data", ondata);
-    }
-  }
-  
-}
-
-type SendOption = {
-  send: boolean;
-  except: number | null;
-}
-const DontSend = <SendOption>{ send: false, except: null };
-const SendToAll = <SendOption>{ send: true, except: null };
+// Rules engine for a match: decks, turn order, picks, scoring and CPU behaviour.
+// Networking lives in GamePeer, the wire format in syncCodec, and the shared value
+// types in GameTypes.
 
 type OuterRefObject = {
 
@@ -437,6 +25,8 @@ type OuterRefObject = {
   currentCharacterId: CharacterId;
   musicSelection: Map<CharacterId, number>;
   playbackSetting: PlaybackSetting;
+  /** Timestamp the current turn's music started, or 0 when nothing has played yet. */
+  musicStartTimestamp: number;
 
   peer: GamePeer;
 
@@ -454,18 +44,13 @@ type OuterRefObject = {
   notifyStopGame: () => void;
   notifyOuterEventHandler: (sender: number, event: Event) => void;
 
-  refresh: (judge: GameJudge) => void;
-}
-
-type PlayerInfo = {
-  name: string;
-  isObserver: boolean;
-  confirmation: {
-    start: boolean;
-    next: boolean;
-  };
-  deck: Array<CardInfo>;
-  collected: Array<CardInfo>;
+  /**
+   * Publishes a change to React (bumps `judgeVersion`). Called at most once per user-visible
+   * change: by the session layer after it invokes a rule, or from a deferred callback the rules
+   * engine owns (the next-turn timer). Never from a synchronous rule method - the caller decides
+   * when the object is in a consistent state to be published.
+   */
+  refresh: () => void;
 }
 
 class GameJudge {
@@ -490,6 +75,15 @@ class GameJudge {
 
   turnStartTimestamp: number | null;
 
+  /**
+   * When the current turn's music started, falling back to when the turn was picked. Both the
+   * rules and the session stamp picks against this so a pick's reaction time means the same
+   * thing everywhere.
+   */
+  turnStartedAt(): number {
+    return this.g().musicStartTimestamp || this.turnStartTimestamp || 0;
+  }
+
   pickEvents: Array<PickEvent>;
 
   clientWaitAcknowledge: boolean;
@@ -504,11 +98,6 @@ class GameJudge {
   isServer(): boolean { return this.matchType === MatchType.Server; }
   isClient(): boolean { return this.matchType === MatchType.Client; }
   isObserver(): boolean { return this.matchType === MatchType.Observer; }
-
-  // used for setState.
-  reconstruct(): GameJudge { 
-    return Object.assign(new GameJudge(this.outerRef), this);
-  }
 
   clearTimeouts(): void {
     if (this.countdownTimeout !== null) {
@@ -1260,11 +849,12 @@ class GameJudge {
       clearTimeout(this.countdownTimeout);
     }
     this.state = GameJudgeState.TurnCountdownNext;
-    this.g().refresh(this);
     // after 3 seconds, call nextTurn
     this.countdownTimeout = setTimeout(() => {
       this.nextTurn();
-      this.g().refresh(this);
+      // Deferred publish, the one legitimate refresh inside the rules: no caller is on the
+      // stack, so there is nobody else to publish this change.
+      this.g().refresh();
     }, 3000);
   }
 
@@ -1281,13 +871,9 @@ class GameJudge {
 
   _serverNextTurn(): void {
     const ok = this.finishTurn();
-    if (!ok) {
-      this.g().refresh(this);
-      return;
-    }
+    if (!ok) { return; }
     this.countdownNextTurn();
     this.g().notifyNextTurnCountdown();
-    this.g().refresh(this);
   }
 
   _clientNextTurn(): void {
@@ -1353,7 +939,6 @@ class GameJudge {
         }
       }
       this.givesLeft = 0;
-      this.g().refresh(this);
     }
   }
 
@@ -1525,7 +1110,7 @@ class GameJudge {
         for (const [index, cardInfo] of this.players[player].deck.entries()) {
           if (cardInfo.characterId === currentCharacterId) {
             this.notifyPickEvent(new PickEvent(
-              Date.now() - (this.turnStartTimestamp || 0),
+              Date.now() - this.turnStartedAt(),
               1,
               cardInfo,
               {deckIndex: player as 0 | 1, cardIndex: index}
@@ -1548,7 +1133,7 @@ class GameJudge {
         const randomIndex = Math.floor(Math.random() * selectableCardInfos.length);
         const [cardInfo, deckPosition] = selectableCardInfos[randomIndex];
         this.notifyPickEvent(new PickEvent(
-          Date.now() - (this.turnStartTimestamp || 0),
+          Date.now() - this.turnStartedAt(),
           1,
           cardInfo,
           deckPosition
@@ -1557,10 +1142,19 @@ class GameJudge {
     }
   }
 
-  isMusicFilteredByDeck(): boolean {
+  /**
+   * Whether every character in the playing order is either held in a deck/collected pile or
+   * disabled in temporary, i.e. whether `filterMusicByDeck` has nothing left to do.
+   *
+   * The two state-derived inputs are arguments rather than reads of `outerRef`: the ref mirrors
+   * React state one commit behind, so a render (which is where the filter button asks this
+   * question) would otherwise answer with the values from before the click it is rendering.
+   */
+  isMusicFilteredByDeck(
+    characterTemporaryDisabled: Map<CharacterId, boolean>,
+    playingOrder: Array<CharacterId>,
+  ): boolean {
     // check all cards that are not inside deck are disabled in temporary
-    const playingOrder = this.playingOrder();
-    const characterTemporaryDisabled = this.characterTemporaryDisabled();
     const inDeck = new Set<CharacterId>();
     for (const player of this.players) {
       for (const cardInfo of player.deck) {
@@ -1630,8 +1224,7 @@ class GameJudge {
       return;
     }
     this.players.splice(id, 1);
-    // after removing, broadcast names again
-    this.g().refresh(this);
+    // The caller is responsible for publishing the change (and for rebroadcasting names).
   }
 
   addPlayer(name: string = "New Observer", fillDeck: boolean = false): void {
@@ -1651,7 +1244,8 @@ class GameJudge {
         this.players[this.players.length - 1].deck.push(new CardInfo(null, 0));
       }
     }
-    this.g().refresh(this);
+    // No refresh here: publishing a copy in the middle of a mutation sequence would freeze the
+    // caller's remaining changes in a stale instance. The caller marks the judge as changed.
   }
 
   addCPUPlayer(): void {
@@ -1712,7 +1306,11 @@ class GameJudge {
   }
 
   // this function is used to be passed to the GamePeer object.
-  remoteEventListener(sender: number, data: unknown): void {
+  //
+  // Publishing contract: this method never refreshes. It is called synchronously from the
+  // session layer, which publishes once afterwards. Refresh calls scattered through the switch
+  // used to publish half-updated states mid-handler; see `refresh` in OuterRefObject.
+  remoteEventListener(sender: number, event: Event): void {
 
     const sendExcept = this.matchType === MatchType.Server ? <SendOption>{ send: true, except: sender } : DontSend;
 
@@ -1826,8 +1424,6 @@ class GameJudge {
       }
     }
 
-    const event = JSON.parse(data as string) as Event;
-
     console.log(sender, "=>", event);
 
     switch (event.type) {
@@ -1838,8 +1434,7 @@ class GameJudge {
         e.cardInfo = new CardInfo(e.cardInfo.characterId, e.cardInfo.cardIndex);
         const successful = this.addToDeck(e.deckPosition.deckIndex, e.cardInfo, e.deckPosition.cardIndex, sendExcept);
 
-        if (successful) { this.g().refresh(this); }
-        else { syncOrRequestSync(); }
+        if (!successful) { syncOrRequestSync(); }
 
         break;
 
@@ -1848,7 +1443,6 @@ class GameJudge {
       case "clearDeck": {
         const e = event as EventClearDeck;
         this.clearDeck(e.player, sendExcept);
-        this.g().refresh(this);
         break;
       }
 
@@ -1857,8 +1451,7 @@ class GameJudge {
         const e = event as EventRemoveCard;
         const successful = this.removeFromDeck(e.deckPosition.deckIndex, e.deckPosition.cardIndex, sendExcept);
 
-        if (successful) { this.g().refresh(this); }
-        else { syncOrRequestSync(); }
+        if (!successful) { syncOrRequestSync(); }
 
         break;
 
@@ -1867,7 +1460,6 @@ class GameJudge {
       case "adjustDeckSize": {
         const e = event as EventAdjustDeckSize;
         this.adjustDeckSize(e.rows, e.columns, sendExcept);
-        this.g().refresh(this);
         break;
       }
 
@@ -1914,7 +1506,6 @@ class GameJudge {
             cardIndex: e.pickEvent.deckPosition.cardIndex,
           }
         ), sendExcept);
-        this.g().refresh(this);
         break;
       }
 
@@ -1924,7 +1515,6 @@ class GameJudge {
           // broadcast
           this.sendEvent(event, sendExcept);
         }
-        this.g().refresh(this);
         break;
       }
 
@@ -1959,7 +1549,6 @@ class GameJudge {
         } else if (event.type === "syncNextTurn") {
           this._serverNextTurn();
         }
-        this.g().refresh(this);
         break;
       }
 
@@ -1970,7 +1559,6 @@ class GameJudge {
           // broadcast
           this.sendEvent(event, sendExcept);
         }
-        this.g().refresh(this);
         break;
       }
 
@@ -1978,7 +1566,6 @@ class GameJudge {
         if (this.isServer() && this.givesLeft < 0) {
           this.givesLeft += 1;
           this.sendEvent(event, sendExcept);
-          this.g().refresh(this);
         } else {
           // this is an event sent from the sender
           if (this.givesLeft < 0) { 
@@ -1987,7 +1574,6 @@ class GameJudge {
           if (this.givesLeft > 0) { 
             this.givesLeft -= 1; // an event directly sent by the server
           }
-          this.g().refresh(this);
         }
         break;
       }
@@ -2004,7 +1590,6 @@ class GameJudge {
           name: this.players[this.myPlayerIndex].name,
           isObserver: this.matchType === MatchType.Observer,
         });
-        this.g().refresh(this);
         break;
       }
 
@@ -2014,7 +1599,6 @@ class GameJudge {
           // broadcast
           this.sendEvent(event, sendExcept);
         }
-        this.g().refresh(this);
         break;
       }
 
@@ -2030,7 +1614,6 @@ class GameJudge {
           player.confirmation.start = false;
           player.confirmation.next = false;
         }
-        this.g().refresh(this);
         break;
       }
 
@@ -2082,7 +1665,6 @@ class GameJudge {
             player.confirmation.start = false;
             player.confirmation.next = false;
           }
-          this.g().refresh(this);
         }
         break;
       }
@@ -2102,6 +1684,7 @@ class GameJudge {
 
 }
 
+// Re-exported so existing imports from "./GameJudge" keep working.
 export {
   GameJudge,
   GameJudgeState,
@@ -2109,11 +1692,16 @@ export {
   PickEvent,
   MatchType,
   GamePeer,
+  ClientConnection,
+  DontSend,
+  SendToAll,
 };
 export type {
   OuterRefObject,
   Player,
   DeckPosition,
+  PlayerInfo,
+  SendOption,
 };
 export type {
   Event, EventAddCard, EventRemoveCard,
@@ -2122,5 +1710,6 @@ export type {
   EventSyncWinnerDetermined, EventSyncStart,
   EventSyncNextTurn, EventStopGame,
   EventSwitchTraditionalMode,
-  EventGive, SendOption, PlayerInfo, EventChat, ClientConnection
-}
+  EventGive, EventChat, SyncData,
+};
+export { encodeEvent, decodeEvent, isKnownEventType } from "./syncCodec";

@@ -1,8 +1,9 @@
+import { RefObject } from "react";
 import { Box, Stack, Typography } from "@mui/material";
-import { 
-  getMusicInfoFromCharacterId,
-  GlobalData, MusicSelectionMap, Playback, PlaybackState
+import {
+  GlobalData, MusicSelectionMap, PlaybackState
 } from "../types/Configs";
+import { musicInfoFor } from "../lib/music";
 import {theme} from "./Theme";
 import PlayerControl from "./PlayerControl";
 import { cheatSanitize } from "../types/Cheat";
@@ -13,14 +14,13 @@ export interface ListTabProps {
   characterTemporaryDisabled: Map<string, boolean>;
   currentCharacterId: string;
   playingOrder: string[];
-  playback: Playback;
+  audioRef: RefObject<HTMLAudioElement | null>;
+  duration: number;
   playbackState: PlaybackState;
   volume: number;
   setCurrentCharacterId: (id: string) => void;
   setCharacterTemporaryDisabled: (map: Map<string, boolean>) => void;
-  setPlayback: (playback: Playback) => void;
   setPlaybackTime?: (time: number) => void;
-  setPlaybackState: (state: PlaybackState) => void;
   setVolume: (volume: number) => void;
   onNextMusic: () => void;
   onPreviousMusic: () => void;
@@ -29,7 +29,7 @@ export interface ListTabProps {
 }
 
 export default function ListTab(props: ListTabProps) {
-  const currentMusicInfo = getMusicInfoFromCharacterId(
+  const currentMusicInfo = musicInfoFor(
     props.data, props.musicSelection, props.currentCharacterId
   );
   const typographySx = {
@@ -50,14 +50,11 @@ export default function ListTab(props: ListTabProps) {
       </Stack>
       <PlayerControl 
         showSlider={true}
-        data={props.data}
-        currentCharacterId={props.currentCharacterId}
-        playback={props.playback}
+        audioRef={props.audioRef}
+        duration={props.duration}
         playbackState={props.playbackState}
         volume={props.volume}
-        setPlayback={props.setPlayback}
         setPlaybackTime={props.setPlaybackTime}
-        setPlaybackState={props.setPlaybackState}
         setVolume={props.setVolume}
         onNextMusic={props.onNextMusic}
         onPreviousMusic={props.onPreviousMusic}
@@ -69,7 +66,7 @@ export default function ListTab(props: ListTabProps) {
           const charData = props.data.characterConfigs.get(charId);
           if (!charData) return null;
           const isDisabled = props.characterTemporaryDisabled.get(charId) ?? false;
-          const musicInfo = getMusicInfoFromCharacterId(props.data, props.musicSelection, charId);
+          const musicInfo = musicInfoFor(props.data, props.musicSelection, charId);
           if (!musicInfo) return null;
           let backgroundColor = index % 2 === 0 ? theme.custom.listBackground1 : theme.custom.listBackground2;
           if (isDisabled) {

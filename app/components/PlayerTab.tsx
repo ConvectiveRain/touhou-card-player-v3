@@ -3,30 +3,31 @@
 import { Box, Button, Stack, TextField, Typography } from "@mui/material";
 import { 
   CharacterId, createPlayingOrder, 
-  getMusicInfoFromCharacterId, GlobalData, 
-  MusicSelectionMap, Playback, PlaybackSetting,
+  GlobalData, 
+  MusicSelectionMap, PlaybackSetting,
   PlaybackState
 } from "../types/Configs";
+import { musicInfoFor } from "../lib/music";
 import PlayerControl from "./PlayerControl";
 import MusicCardDisplay from "./MusicCardDisplay";
 import { CardBackgroundState, CharacterCard } from "./CharacterCard";
-import { useEffect, useState } from "react";
+import { RefObject, useEffect, useState } from "react";
 import { GetLocalizedString, Localization } from "../types/Localization";
 import { NoFontFamily } from "./Theme";
+import { useWindowWidth } from "../lib/useWindowWidth";
 
 
 export interface PlayerTabProps {
   data: GlobalData;
   musicSelection: MusicSelectionMap;
   currentCharacterId: CharacterId;
-  playback: Playback;
+  audioRef: RefObject<HTMLAudioElement | null>;
+  duration: number;
   playingOrder: Array<CharacterId>;
   characterTemporaryDisabled: Map<CharacterId, boolean>;
   playbackSetting: PlaybackSetting;
   playbackState: PlaybackState;
   volume: number;
-  setPlayback: (playback: Playback) => void;
-  setPlaybackState: (state: PlaybackState) => void;
   setCharacterTemporaryDisabled: (map: Map<CharacterId, boolean>) => void;
   setPlayingOrder: (order: Array<CharacterId>) => void;
   setCurrentCharacterId: (characterId: CharacterId) => void;
@@ -40,18 +41,18 @@ export interface PlayerTabProps {
 };
 
 export default function PlayerTab({
-  data, currentCharacterId, playback, setPlayback, playingOrder,
+  data, currentCharacterId, audioRef, duration, playingOrder,
   musicSelection, 
   onNextMusic, onPreviousMusic, onPlay, onPause,
   characterTemporaryDisabled, setCharacterTemporaryDisabled, setPlayingOrder, setCurrentCharacterId,
   playbackSetting, setPlaybackSetting, setPlaybackTime,
-  playbackState, setPlaybackState,
+  playbackState,
   volume, setVolume,
 }: PlayerTabProps) {
 
   const [hoveringCharacterId, setHoveringCharacterId] = useState<CharacterId | null>(null);
   const [playbackDurationString, setPlaybackDurationString] = useState<string>("0");
-  const [windowWidth, setWindowWidth] = useState<number>(typeof window !== "undefined" ? window.innerWidth : 1200);
+  const windowWidth = useWindowWidth();
 
   useEffect(() => {
     setPlaybackDurationString(playbackSetting.playbackDuration.toString());
@@ -62,16 +63,6 @@ export default function PlayerTab({
     currentIndex = 0;
   }
   const placeholderCardSource = data.getAnyCardSource();
-
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowWidth(window.innerWidth);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    }
-  }, []);
 
   const upcomingCards = [];
   {
@@ -202,7 +193,7 @@ export default function PlayerTab({
           {playingOrder.map((characterId, index) => {
             const characterData = data.characterConfigs.get(characterId);
             const cardSources = characterData?.card || [];
-            let musicInfo = getMusicInfoFromCharacterId(data, musicSelection, characterId);
+            let musicInfo = musicInfoFor(data, musicSelection, characterId);
             if (!musicInfo) {
               musicInfo = {
                 characterId: characterId,
@@ -235,13 +226,10 @@ export default function PlayerTab({
         </Stack>
         <PlayerControl
           showSlider={true}
-          data={data}
-          currentCharacterId={currentCharacterId}
-          playback={playback}
+          audioRef={audioRef}
+          duration={duration}
           playbackState={playbackState}
           volume={volume}
-          setPlayback={setPlayback}
-          setPlaybackState={setPlaybackState}
           setPlaybackTime={setPlaybackTime}
           setVolume={setVolume}
           onNextMusic={onNextMusic}
