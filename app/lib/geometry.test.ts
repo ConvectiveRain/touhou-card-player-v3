@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  CanvasMargin, CanvasSpacing, HoverRaiseHeight,
-  canvasPositionToDeckPosition, computeBoardLayout, computeDeckColumnLayout,
+  CanvasMargin, CanvasSpacing, CardWidthPercentageMin, HoverRaiseHeight, MaxCardWidthTotalPercentage,
+  MaxDeckColumns, canvasPositionToDeckPosition, computeBoardLayout, computeDeckColumnLayout,
   computeDeckColumnVisibility, computeUnusedCardsStrip, getCardTransitionString,
-  growCanvasHeight, mapDeckSide, toDeckCardPosition, unusedCardsStripMaxWidth,
+  growCanvasHeight, mapDeckSide, maxCardWidthPercentageForDeck, toDeckCardPosition,
+  unusedCardsStripMaxWidth,
 } from "./geometry";
 import type { BoardLayoutInput } from "./geometry";
 
@@ -364,6 +365,16 @@ describe("small helpers", () => {
     const transition = getCardTransitionString("0.3s");
     expect(transition).toBe(
       "top 0.3s, left 0.3s, transform 0.3s, background-color 0.3s, width 0.3s, height 0.3s",
+    );
+  });
+
+  it("splits the allowed deck width over the columns", () => {
+    // 15 columns is the widest deck the controls allow, and its share stays above the minimum
+    expect(maxCardWidthPercentageForDeck(1)).toBeCloseTo(MaxCardWidthTotalPercentage);
+    expect(maxCardWidthPercentageForDeck(8)).toBeCloseTo(MaxCardWidthTotalPercentage / 8);
+    expect(maxCardWidthPercentageForDeck(MaxDeckColumns)).toBeGreaterThan(CardWidthPercentageMin);
+    expect(maxCardWidthPercentageForDeck(MaxDeckColumns) * MaxDeckColumns).toBeCloseTo(
+      MaxCardWidthTotalPercentage,
     );
   });
 });

@@ -25,6 +25,17 @@ export const DefaultDeckColumns = 8;
 export const MaxDeckRows = 5;
 export const MaxDeckColumns = 15;
 
+/** A whole deck row may take at most this share of the canvas width. */
+export const MaxCardWidthTotalPercentage = 0.85;
+
+/**
+ * The widest one card of a `deckColumns` wide deck may be, so that the row stays within
+ * `MaxCardWidthTotalPercentage` of the canvas.
+ */
+export function maxCardWidthPercentageForDeck(deckColumns: number): number {
+  return MaxCardWidthTotalPercentage / deckColumns;
+}
+
 export const CardTransitionProperties = [
   "top", "left", "transform", "background-color", "width", "height",
 ] as const;
