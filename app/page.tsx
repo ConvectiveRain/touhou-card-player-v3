@@ -175,7 +175,15 @@ export default function Home() {
         <Stack direction="column" spacing={1} sx={{
           width: "100%", alignItems: "center", paddingTop: 2,
         }}>
-          <Box sx={{ width: "100%", paddingLeft: 2, paddingRight: 2 }}>
+          <Stack
+            direction="row"
+            spacing={0.5}
+            alignItems="center"
+            sx={{
+              maxWidth: "100%", flexWrap: "nowrap",
+              overflowX: "auto", paddingLeft: 1, paddingRight: 1,
+            }}
+          >
             <LibraryPicker
               data={globalData}
               musicSelection={musicSelection}
@@ -186,8 +194,7 @@ export default function Home() {
               setCurrentCharacterId={setCurrentCharacterId}
               disabled={player.inGame}
             />
-          </Box>
-          <Stack direction="row" spacing={0.5}>
+            <Divider orientation="vertical" flexItem />
             <TabButton
               label={GetLocalizedString(Localization.TabNamePlayer)}
               selected={activeTab === PlayerTabIndex}

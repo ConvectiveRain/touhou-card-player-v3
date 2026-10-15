@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Box, Button, Chip, Divider, Paper, Stack, Typography } from "@mui/material";
+import {
+  Box, Button, Drawer, MenuItem, Select, Stack, Typography,
+} from "@mui/material";
 import Image from "next/image";
 import { GlobalData, MusicSelectionMap } from "../types/Configs";
 import { cardImageUrl } from "../lib/cardImages";
@@ -181,27 +183,21 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   const smallText = { fontFamily: NoFontFamily, fontSize: "0.8em", color: "text.secondary" };
 
   return (
-    <Paper sx={{
-      width: "100%", padding: 1, backgroundColor: theme.custom.mainTabBackground,
-      border: "1px solid", borderColor: "divider",
-    }}>
-      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-        <Typography sx={{ fontFamily: NoFontFamily, fontSize: "0.85em", color: "text.secondary" }}>
-          社团
-        </Typography>
+    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
+      <Select
+        size="small"
+        value={circle}
+        disabled={props.disabled}
+        onChange={(event) => { setCircle(event.target.value); }}
+        sx={{ fontFamily: NoFontFamily, fontSize: "0.78em", minWidth: "6.5em" }}
+      >
         {[AllCircles, ...library.circles].map((name) => (
-          <Chip
-            key={name}
-            label={name}
-            size="small"
-            color={circle === name ? "primary" : "default"}
-            variant={circle === name ? "filled" : "outlined"}
-            disabled={props.disabled}
-            onClick={() => { setCircle(name); }}
-          />
+          <MenuItem key={name} value={name} sx={{ fontFamily: NoFontFamily, fontSize: "0.85em" }}>
+            {name}
+          </MenuItem>
         ))}
-        <Divider orientation="vertical" flexItem />
-        <Button
+      </Select>
+      <Button
           size="small"
           variant={panel === "characters" ? "contained" : "text"}
           disabled={props.disabled}
@@ -227,8 +223,15 @@ export default function LibraryPicker(props: LibraryPickerProps) {
         </Button>
       </Stack>
 
-      {panel !== null && (
-        <Box sx={{ marginTop: 1 }}>
+      <Drawer
+        anchor="right"
+        open={panel !== null}
+        onClose={() => { setPanel(null); }}
+      >
+        <Box sx={{
+          width: 440, maxWidth: "94vw", padding: 1.5,
+          backgroundColor: theme.custom.mainTabBackground, height: "100%",
+        }}>
           {panel !== "tracks" && (
           <Stack direction="row" spacing={1} alignItems="center" sx={{ marginBottom: 1 }}>
             <input
@@ -375,7 +378,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
             </Box>
           )}
         </Box>
-      )}
-    </Paper>
+      </Drawer>
+    </Stack>
   );
 }
