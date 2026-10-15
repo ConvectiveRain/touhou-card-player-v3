@@ -10,7 +10,7 @@
 ## 2026-10-15
 * Added "霊長新益京　～ Artificial Utopia in Ruins." songs.
 * Updated card of "ニナ" and "馴子".
+* Adjust CPU match settings to be more realisitic.
+* Added Japanese locale (`?locale=ja`, or auto-detected from the browser language).
 
 ## TODO
-* Adjust CPU match settings to be more realisitic.
-* Japanese locale.

@@ -11,7 +11,7 @@ export type FeatureFlags = {
   glitch: boolean;
   /** `?r2` — load card images from the Cloudflare R2 bucket instead of the local copies. */
   useR2: boolean;
-  /** `?locale=en|zh` — explicit locale override. */
+  /** `?locale=en|zh|ja` — explicit locale override. */
   locale: string | null;
   /** `?cheatcode=...` — enables cheat mode when it matches. */
   cheatcode: string | null;

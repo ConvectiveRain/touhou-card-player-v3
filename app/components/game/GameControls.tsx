@@ -11,6 +11,7 @@ import {
 import { GameButton } from "../GameTabControls";
 import { NoFontFamily } from "../Theme";
 import { GetLocalizedString, Localization } from "../../types/Localization";
+import type { LocalizedString } from "../../types/Localization";
 import { cheatSanitize } from "../../types/Cheat";
 import {
   CharacterId, GlobalData, MusicSelectionMap,
@@ -527,7 +528,7 @@ export function OpponentDeckControls({
   // card count, which is why a full board plays slower and sloppier than a nearly cleared one.
   const fullDeckCards = Math.max(layout.deckRows * layout.deckColumns * 2, 1);
   const activePreset = matchingCPUOpponentPreset(cpuOpponentSetting);
-  const presetLabel: Record<CPUOpponentPresetId, { en: string; zh: string }> = {
+  const presetLabel: Record<CPUOpponentPresetId, LocalizedString> = {
     easy: Localization.GameOpponentPresetEasy,
     normal: Localization.GameOpponentPresetNormal,
     hard: Localization.GameOpponentPresetHard,
