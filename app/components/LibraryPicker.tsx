@@ -57,8 +57,11 @@ export interface LibraryPickerProps {
   disabled?: boolean;
 }
 
-/** 「下面那份曲目列表」现在在看谁：点过角色卡就是这位角色，点过专辑就是这张专辑。 */
-type BrowseTarget = { kind: "character"; id: string } | { kind: "album"; album: LibraryAlbum };
+/**
+ * 点过的专辑。`anchor` 是点它时切过去的那位角色：只要还在播这位角色就显示这张专辑的曲目，
+ * 一旦播放走到别的角色（点了下一首 / 上一首、点了别的卡或列表行），列表自动回到跟随当前角色。
+ */
+type AlbumBrowse = { album: LibraryAlbum; anchor: string };
 
 export default function LibraryPicker(props: LibraryPickerProps) {
   const [library, setLibrary] = useState<LibraryData | null>(null);
@@ -67,7 +70,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [trackQuery, setTrackQuery] = useState("");
-  const [browse, setBrowse] = useState<BrowseTarget | null>(null);
+  const [browsedAlbum, setBrowsedAlbum] = useState<AlbumBrowse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -172,7 +175,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       props.setPlayingOrder([...props.playingOrder, characterId]);
     }
     props.setCurrentCharacterId(characterId);
-    setBrowse({ kind: "character", id: characterId });
+    setBrowsedAlbum(null);
     props.onPlaySelection();
   };
 
@@ -195,7 +198,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     props.setMusicSelection(selection);
     props.setPlayingOrder(order);
     if (first !== null) { props.setCurrentCharacterId(first); }
-    setBrowse({ kind: "album", album });
+    setBrowsedAlbum({ album, anchor: first ?? "" });
     props.onPlaySelection();
   };
 
@@ -208,21 +211,28 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       props.setPlayingOrder([...props.playingOrder, characterId]);
     }
     props.setCurrentCharacterId(characterId);
+    // 看专辑时点里面的某一首：继续看这张专辑，只是把"锚点"换成这位角色
+    if (albumBrowse) { setBrowsedAlbum({ album: albumBrowse.album, anchor: characterId }); }
     props.onPlaySelection();
   };
 
   /**
-   * 曲目列表：跟着"点了什么"走——点角色卡看该角色的全部曲目，点专辑看该专辑的全部曲目
-   * （没点过之前跟着当前正在播的角色）。输入关键词时在全部曲目里搜。
+   * 曲目列表：默认跟着当前正在播的角色走（点下一首 / 上一首就跟着换人）；
+   * 点过专辑、且还没离开这张专辑的锚点角色时，改显示这张专辑的全部曲目。
+   * 输入关键词时在全部曲目里搜。
    */
+  const albumBrowse = browsedAlbum && browsedAlbum.anchor === props.currentCharacterId
+    ? browsedAlbum
+    : null;
+
   const shownTracks = useMemo(() => {
     const query = trackQuery.trim().toLowerCase();
     if (query) {
       return allTracks.filter((track) => track.haystack.includes(query)).slice(0, 300);
     }
-    if (browse?.kind === "album") {
+    if (albumBrowse) {
       const list = [];
-      for (const musicId of browse.album.music) {
+      for (const musicId of albumBrowse.album.music) {
         const characterId = characterOfMusic.get(musicId);
         if (!characterId) { continue; }
         const config = props.data.characterConfigs.get(characterId);
@@ -237,18 +247,15 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       }
       return list.slice(0, 300);
     }
-    const characterId = browse?.kind === "character" ? browse.id : props.currentCharacterId;
-    return allTracks.filter((track) => track.characterId === characterId).slice(0, 300);
-  }, [allTracks, trackQuery, browse, characterOfMusic, props.data, props.currentCharacterId]);
+    return allTracks.filter((track) => track.characterId === props.currentCharacterId).slice(0, 300);
+  }, [allTracks, trackQuery, albumBrowse, characterOfMusic, props.data, props.currentCharacterId]);
 
   // 列表上面那行小字：现在看的是谁 / 哪张专辑
   const listCaption = trackQuery
     ? `${shownTracks.length} 首（最多列 300）`
-    : browse?.kind === "album"
-      ? `专辑：${browse.album.name}（${shownTracks.length} 首）`
-      : browse?.kind === "character"
-        ? `角色：${browse.id}（${shownTracks.length} 首）`
-        : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首）`;
+    : albumBrowse
+      ? `专辑：${albumBrowse.album.name}（${shownTracks.length} 首）`
+      : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首）`;
 
   if (!library) { return null; }
 
@@ -383,7 +390,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
           <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", order: 4 }}>
               {shownTracks.length === 0 && (
                 <Typography sx={{ ...smallText, padding: "6px" }}>
-                  {browse?.kind === "album"
+                  {albumBrowse
                     ? "这张专辑在当前曲目范围里没有可播的曲目。"
                     : "没有曲目。先点一张角色卡，或换个关键词。"}
                 </Typography>
@@ -464,7 +471,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                   ? (albumTracks.get(album.id) ?? [])
                   : album.music;
                 // 正在看的这张专辑高亮一下
-                const browsing = browse?.kind === "album" && browse.album.id === album.id;
+                const browsing = albumBrowse?.album.id === album.id;
                 return (
                 <Box
                   key={album.id}
