@@ -10,6 +10,7 @@ import CustomTabs from "./components/CustomTabs";
 import ListTab from "./components/ListTab";
 import GameTab from "./components/GameTab";
 import ConfigTab from "./components/ConfigTab";
+import LibraryPicker from "./components/LibraryPicker";
 import { GetLocalizedString, Localization } from "./types/Localization";
 import { PagePRNG } from "./types/PagePrng";
 import { useWindowWidth } from "./lib/useWindowWidth";
@@ -174,6 +175,18 @@ export default function Home() {
         <Stack direction="column" spacing={1} sx={{
           width: "100%", alignItems: "center", paddingTop: 2,
         }}>
+          <Box sx={{ width: "100%", paddingLeft: 2, paddingRight: 2 }}>
+            <LibraryPicker
+              data={globalData}
+              musicSelection={musicSelection}
+              currentCharacterId={currentCharacterId as CharacterId}
+              playingOrder={playingOrder}
+              setMusicSelection={setMusicSelection}
+              setPlayingOrder={setPlayingOrder}
+              setCurrentCharacterId={setCurrentCharacterId}
+              disabled={player.inGame}
+            />
+          </Box>
           <Stack direction="row" spacing={0.5}>
             <TabButton
               label={GetLocalizedString(Localization.TabNamePlayer)}
