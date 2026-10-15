@@ -5,6 +5,7 @@ import { Box, Button, Chip, Divider, Paper, Stack, Typography } from "@mui/mater
 import Image from "next/image";
 import { GlobalData, MusicSelectionMap } from "../types/Configs";
 import { cardImageUrl } from "../lib/cardImages";
+import { parseMusicInfo } from "../lib/music";
 import { getFeatures } from "../lib/features";
 import { fetchJson } from "../lib/fetchJson";
 import { NoFontFamily, theme } from "./Theme";
@@ -21,6 +22,7 @@ type LibraryAlbum = {
   name: string;
   circle: string;
   date: string;
+  cover?: boolean;
   music: string[];
 };
 
@@ -48,8 +50,9 @@ export interface LibraryPickerProps {
 export default function LibraryPicker(props: LibraryPickerProps) {
   const [library, setLibrary] = useState<LibraryData | null>(null);
   const [circle, setCircle] = useState<string>(AllCircles);
-  const [panel, setPanel] = useState<"characters" | "albums" | null>(null);
+  const [panel, setPanel] = useState<"characters" | "albums" | "tracks" | null>(null);
   const [keyword, setKeyword] = useState("");
+  const [trackQuery, setTrackQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +71,25 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       });
     });
     return index;
+  }, [props.data]);
+
+  // 曲目索引：直接从角色配置里展开（曲目 ID 里就带着专辑和曲名）
+  const allTracks = useMemo(() => {
+    const list: Array<{
+      characterId: string; index: number; musicId: string; title: string; album: string; haystack: string;
+    }> = [];
+    props.data.characterConfigs.forEach((config, characterId) => {
+      config.musics.forEach((musicId, index) => {
+        if (!props.data.sources.has(musicId)) { return; }
+        const info = parseMusicInfo(musicId);
+        list.push({
+          characterId, index, musicId,
+          title: info.title, album: info.album,
+          haystack: `${info.title} ${info.album} ${characterId}`.toLowerCase(),
+        });
+      });
+    });
+    return list;
   }, [props.data]);
 
   const circleOfCharacter = (characterId: string): string[] => {
@@ -130,10 +152,30 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     if (first !== null) { props.setCurrentCharacterId(first); }
   };
 
+  // 点具体某一首：把该角色切到这一首，并保证它在队列里
+  const playTrack = (characterId: string, index: number) => {
+    const selection = new Map(props.musicSelection);
+    selection.set(characterId, index);
+    props.setMusicSelection(selection);
+    if (!props.playingOrder.includes(characterId)) {
+      props.setPlayingOrder([...props.playingOrder, characterId]);
+    }
+    props.setCurrentCharacterId(characterId);
+  };
+
+  // 曲目列表：不输关键词时显示「当前角色」的歌，输了就在全部曲目里搜
+  const shownTracks = useMemo(() => {
+    const query = trackQuery.trim().toLowerCase();
+    if (!query) {
+      return allTracks.filter((track) => track.characterId === props.currentCharacterId).slice(0, 300);
+    }
+    return allTracks.filter((track) => track.haystack.includes(query)).slice(0, 300);
+  }, [allTracks, trackQuery, props.currentCharacterId]);
+
   if (!library) { return null; }
 
   const features = getFeatures();
-  const toggle = (which: "characters" | "albums") => {
+  const toggle = (which: "characters" | "albums" | "tracks") => {
     setPanel((current) => (current === which ? null : which));
   };
   const smallText = { fontFamily: NoFontFamily, fontSize: "0.8em", color: "text.secondary" };
@@ -175,10 +217,19 @@ export default function LibraryPicker(props: LibraryPickerProps) {
         >
           专辑
         </Button>
+        <Button
+          size="small"
+          variant={panel === "tracks" ? "contained" : "text"}
+          disabled={props.disabled}
+          onClick={() => { toggle("tracks"); }}
+        >
+          曲目
+        </Button>
       </Stack>
 
       {panel !== null && (
         <Box sx={{ marginTop: 1 }}>
+          {panel !== "tracks" && (
           <Stack direction="row" spacing={1} alignItems="center" sx={{ marginBottom: 1 }}>
             <input
               value={keyword}
@@ -194,6 +245,64 @@ export default function LibraryPicker(props: LibraryPickerProps) {
               {panel === "characters" ? `${characters.length} 个角色` : `${albums.length} 张专辑`}
             </Typography>
           </Stack>
+          )}
+
+          {panel === "tracks" && (
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ marginBottom: 1 }}>
+              <input
+                value={trackQuery}
+                onChange={(event) => { setTrackQuery(event.target.value); }}
+                placeholder="搜曲名 / 专辑 / 角色；留空则显示当前角色的全部曲目"
+                style={{
+                  flex: 1, padding: "4px 8px", fontSize: "0.85em",
+                  backgroundColor: "transparent", color: "inherit",
+                  border: "1px solid rgba(255,255,255,0.25)", borderRadius: 4,
+                }}
+              />
+              <Typography sx={smallText}>
+                {trackQuery ? `${shownTracks.length} 首（最多列 300）` : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首）`}
+              </Typography>
+            </Stack>
+          )}
+
+          {panel === "tracks" && (
+            <Box sx={{ maxHeight: "42vh", overflowY: "auto" }}>
+              {shownTracks.length === 0 && (
+                <Typography sx={{ ...smallText, padding: "6px" }}>
+                  没有曲目。先点一张角色卡，或换个关键词。
+                </Typography>
+              )}
+              {shownTracks.map((track) => {
+                const active = props.musicSelection.get(track.characterId) === track.index;
+                return (
+                  <Box
+                    key={`${track.characterId}-${track.musicId}`}
+                    onClick={() => { if (!props.disabled) { playTrack(track.characterId, track.index); } }}
+                    sx={{
+                      display: "flex", alignItems: "center", gap: 1, padding: "3px 6px",
+                      cursor: props.disabled ? "default" : "pointer", borderRadius: 1,
+                      backgroundColor: active ? "rgba(193,72,72,0.35)" : "transparent",
+                      "&:hover": { backgroundColor: "rgba(255,255,255,0.08)" },
+                    }}
+                  >
+                    <Typography sx={{
+                      fontFamily: NoFontFamily, fontSize: "0.85em", flex: 1,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}>
+                      {track.title}
+                    </Typography>
+                    <Typography sx={{
+                      ...smallText, fontSize: "0.72em", maxWidth: "38%",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}>
+                      {track.album}
+                    </Typography>
+                    <Typography sx={{ ...smallText, fontSize: "0.72em" }}>{track.characterId}</Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
 
           {panel === "characters" && (
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, maxHeight: "42vh", overflowY: "auto" }}>
@@ -244,6 +353,15 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                     "&:hover": { backgroundColor: "rgba(255,255,255,0.08)" },
                   }}
                 >
+                  {album.cover && (
+                    <Image
+                      src={`covers_local/${album.id}.jpg`}
+                      alt={album.name}
+                      width={34}
+                      height={34}
+                      style={{ borderRadius: 3, display: "block", flexShrink: 0 }}
+                    />
+                  )}
                   <Typography sx={{
                     fontFamily: NoFontFamily, fontSize: "0.85em", flex: 1,
                     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
