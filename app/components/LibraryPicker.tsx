@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Box, Button, Drawer, MenuItem, Select, Stack, Typography,
+  Box, Button, Divider, Drawer, MenuItem, Select, Stack, Typography,
 } from "@mui/material";
 import Image from "next/image";
 import { GlobalData, MusicSelectionMap } from "../types/Configs";
@@ -52,7 +52,8 @@ export interface LibraryPickerProps {
 export default function LibraryPicker(props: LibraryPickerProps) {
   const [library, setLibrary] = useState<LibraryData | null>(null);
   const [circle, setCircle] = useState<string>(AllCircles);
-  const [panel, setPanel] = useState<"characters" | "albums" | "tracks" | null>(null);
+  const [topPanel, setTopPanel] = useState<"characters" | "albums">("characters");
+  const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [trackQuery, setTrackQuery] = useState("");
 
@@ -111,9 +112,15 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       }
       list.push({ id: characterId, card: config.card[0] });
     });
-    return list;
+    // 已在队列里的角色按抽选顺序排在前面，其余保持原顺序
+    const rank = new Map(props.playingOrder.map((id, i) => [id, i] as const));
+    return list.sort((a, b) => {
+      const ra = rank.has(a.id) ? (rank.get(a.id) as number) : Number.MAX_SAFE_INTEGER;
+      const rb = rank.has(b.id) ? (rank.get(b.id) as number) : Number.MAX_SAFE_INTEGER;
+      return ra - rb;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.data, library, circle, keyword]);
+  }, [props.data, library, circle, keyword, props.playingOrder]);
 
   const albums = useMemo(() => {
     if (!library) { return []; }
@@ -177,8 +184,11 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   if (!library) { return null; }
 
   const features = getFeatures();
-  const toggle = (which: "characters" | "albums" | "tracks") => {
-    setPanel((current) => (current === which ? null : which));
+  // 再点一次同一个按钮就收起面板
+  const openSection = (which: "characters" | "albums") => {
+    if (open && topPanel === which) { setOpen(false); return; }
+    setTopPanel(which);
+    setOpen(true);
   };
   const smallText = { fontFamily: NoFontFamily, fontSize: "0.8em", color: "text.secondary" };
 
@@ -200,25 +210,25 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       </Select>
       <Button
           size="small"
-          variant={panel === "characters" ? "contained" : "text"}
+          variant={open && topPanel === "characters" ? "contained" : "text"}
           disabled={props.disabled}
-          onClick={() => { toggle("characters"); }}
+          onClick={() => { openSection("characters"); }}
         >
           角色卡
         </Button>
         <Button
           size="small"
-          variant={panel === "albums" ? "contained" : "text"}
+          variant={open && topPanel === "albums" ? "contained" : "text"}
           disabled={props.disabled}
-          onClick={() => { toggle("albums"); }}
+          onClick={() => { openSection("albums"); }}
         >
           专辑
         </Button>
         <Button
           size="small"
-          variant={panel === "tracks" ? "contained" : "text"}
+          variant={open ? "outlined" : "text"}
           disabled={props.disabled}
-          onClick={() => { toggle("tracks"); }}
+          onClick={() => { setOpen((current) => !current); }}
         >
           曲目
         </Button>
@@ -226,19 +236,31 @@ export default function LibraryPicker(props: LibraryPickerProps) {
 
       <Drawer
         anchor="right"
-        open={panel !== null}
-        onClose={() => { setPanel(null); }}
+        variant="persistent"
+        open={open}
+        onClose={() => { setOpen(false); }}
+        sx={{
+          "& .MuiDrawer-paper": {
+            top: "64px",
+            height: "calc(100% - 64px)",
+            width: { xs: "100%", sm: 420 },
+            maxWidth: "100%",
+            backgroundColor: theme.custom.mainTabBackground,
+            borderLeft: "1px solid",
+            borderColor: "divider",
+          },
+        }}
       >
         <Box sx={{
-          width: 440, maxWidth: "94vw", padding: 1.5,
-          backgroundColor: theme.custom.mainTabBackground, height: "100%",
+          width: "100%", padding: 1.5, height: "100%",
+          display: "flex", flexDirection: "column", gap: 1,
         }}>
-          {panel !== "tracks" && (
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ marginBottom: 1 }}>
+          {(
+          <Stack direction="row" spacing={1} alignItems="center">
             <input
               value={keyword}
               onChange={(event) => { setKeyword(event.target.value); }}
-              placeholder={panel === "characters" ? "搜角色名（中/日/罗马字）" : "搜专辑名或社团名"}
+              placeholder={topPanel === "characters" ? "搜角色名（中/日/罗马字）" : "搜专辑名或社团名"}
               style={{
                 flex: 1, padding: "4px 8px", fontSize: "0.85em",
                 backgroundColor: "transparent", color: "inherit",
@@ -246,13 +268,14 @@ export default function LibraryPicker(props: LibraryPickerProps) {
               }}
             />
             <Typography sx={smallText}>
-              {panel === "characters" ? `${characters.length} 个角色` : `${albums.length} 张专辑`}
+              {topPanel === "characters" ? `${characters.length} 个角色` : `${albums.length} 张专辑`}
             </Typography>
           </Stack>
           )}
 
-          {panel === "tracks" && (
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ marginBottom: 1 }}>
+          <Divider sx={{ order: 2 }} />
+
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ order: 3 }}>
               <input
                 value={trackQuery}
                 onChange={(event) => { setTrackQuery(event.target.value); }}
@@ -266,11 +289,9 @@ export default function LibraryPicker(props: LibraryPickerProps) {
               <Typography sx={smallText}>
                 {trackQuery ? `${shownTracks.length} 首（最多列 300）` : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首）`}
               </Typography>
-            </Stack>
-          )}
+          </Stack>
 
-          {panel === "tracks" && (
-            <Box sx={{ maxHeight: "42vh", overflowY: "auto" }}>
+          <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", order: 4 }}>
               {shownTracks.length === 0 && (
                 <Typography sx={{ ...smallText, padding: "6px" }}>
                   没有曲目。先点一张角色卡，或换个关键词。
@@ -305,11 +326,10 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                   </Box>
                 );
               })}
-            </Box>
-          )}
+          </Box>
 
-          {panel === "characters" && (
-            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, maxHeight: "42vh", overflowY: "auto" }}>
+          {topPanel === "characters" && (
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, maxHeight: "34vh", overflowY: "auto", order: 1 }}>
               {characters.map((character) => {
                 const selected = character.id === props.currentCharacterId;
                 const queued = props.playingOrder.includes(character.id);
@@ -345,8 +365,8 @@ export default function LibraryPicker(props: LibraryPickerProps) {
             </Box>
           )}
 
-          {panel === "albums" && (
-            <Box sx={{ maxHeight: "42vh", overflowY: "auto" }}>
+          {topPanel === "albums" && (
+            <Box sx={{ maxHeight: "34vh", overflowY: "auto", order: 1 }}>
               {albums.map((album) => (
                 <Box
                   key={album.id}
