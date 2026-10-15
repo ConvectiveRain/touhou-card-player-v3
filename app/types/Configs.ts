@@ -122,6 +122,8 @@ type PlaybackSetting = {
   countdown: boolean;
   randomStartPosition: boolean;
   playbackDuration: number;
+  /** 切歌不播放：上一首 / 下一首只换曲目，按播放键才真正出声。 */
+  pauseOnSwitch: boolean;
 }
 
 function createPlayingOrder(

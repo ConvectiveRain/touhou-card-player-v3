@@ -84,7 +84,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   const [duration, setDuration] = useState<number>(0);
   const [playbackState, setPlaybackState] = useState<PlaybackState>(PlaybackState.Stopped);
   const [playbackSetting, setPlaybackSetting] = useState<PlaybackSetting>({
-    countdown: false, randomStartPosition: false, playbackDuration: 0,
+    countdown: false, randomStartPosition: false, playbackDuration: 0, pauseOnSwitch: false,
   });
   const [volume, setVolumeState] = useState<number>(() => loadVolume());
   const [musicStartTimestamp, setMusicStartTimestamp] = useState<number>(0);
@@ -211,12 +211,16 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
       const isDisabled = characterTemporaryDisabled.get(characterId);
       if (selection !== undefined && selection !== -1 && !isDisabled) {
         setCurrentCharacterId(characterId);
+        // 「切歌不播放」：换到新曲目后停在暂停状态，等用户自己按播放键
+        if (stateRef.current.playbackSetting.pauseOnSwitch) {
+          pause();
+        }
         return;
       }
     }
   }, [
     playingOrder, currentCharacterId, musicSelection, characterTemporaryDisabled,
-    setCurrentCharacterId,
+    setCurrentCharacterId, pause,
   ]);
 
   const next = useCallback(() => { stepCharacter(1); }, [stepCharacter]);

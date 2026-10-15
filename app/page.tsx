@@ -189,6 +189,8 @@ export default function Home() {
               musicSelection={musicSelection}
               currentCharacterId={currentCharacterId as CharacterId}
               playingOrder={playingOrder}
+              scope={gameData.musicScope}
+              setScope={gameData.setMusicScope}
               setMusicSelection={setMusicSelection}
               setPlayingOrder={setPlayingOrder}
               setCurrentCharacterId={setCurrentCharacterId}

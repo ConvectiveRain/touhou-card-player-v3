@@ -38,6 +38,7 @@ const Localization = {
   PlayerTabCountdown: u("Countdown", "倒计时"),
   PlayerTabPlaybackDurationLabel: u("Playback Duration (s; 0 = inf)", "播放时长（秒；0 = 无限）"),
   PlayerTabHideDisplay: u("Hide Display", "隐藏显示"),
+  PlayerTabSwitchPaused: u("Skip Without Playing", "切歌不播放"),
 
   ConfigTabCardCollection: u("Card Collection", "卡面图集"),
   ConfigTabMusicSource: u("Music Source", "音乐源"),

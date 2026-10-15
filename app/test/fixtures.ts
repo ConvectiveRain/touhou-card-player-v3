@@ -78,7 +78,7 @@ export function createTestOuterRef(options: {
 } = {}): OuterRefWithCalls {
   const globalData = options.globalData ?? createTestGlobalData();
   const playbackSetting: PlaybackSetting = options.playbackSetting ?? {
-    countdown: false, randomStartPosition: false, playbackDuration: 0,
+    countdown: false, randomStartPosition: false, playbackDuration: 0, pauseOnSwitch: false,
   };
 
   const calls: RecordedCalls = {

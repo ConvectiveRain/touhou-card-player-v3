@@ -3,6 +3,7 @@ import {
   DefaultCardWidthPercentage, DefaultDeckColumns, DefaultDeckRows,
   MaxDeckColumns, MaxDeckRows,
 } from "./geometry";
+import { DefaultMusicScope, isMusicScope, MusicScope } from "./originalScope";
 
 /**
  * Every localStorage key the app uses, with the validation that used to be inlined in
@@ -16,6 +17,7 @@ export const StorageKeys = {
   characterTemporaryDisabled: "characterTemporaryDisabled",
   currentCharacterId: "currentCharacterId",
   musicSourceKey: "musicSourceKey",
+  musicScope: "musicScope",
   playerName: "myName",
   volume: "volume",
   gameSetting: "gameSetting",
@@ -140,6 +142,16 @@ export function loadMusicSourceKey(): string | null {
 
 export function saveMusicSourceKey(key: string): void {
   writeItem(StorageKeys.musicSourceKey, key);
+}
+
+/** 全部曲目 / 仅单原曲；读不出来或写坏了都回到默认（仅单原曲）。 */
+export function loadMusicScope(): MusicScope {
+  const stored = readJson<unknown>(StorageKeys.musicScope);
+  return isMusicScope(stored) ? stored : DefaultMusicScope;
+}
+
+export function saveMusicScope(scope: MusicScope): void {
+  writeItem(StorageKeys.musicScope, JSON.stringify(scope));
 }
 
 export function loadPlayerName(): string {

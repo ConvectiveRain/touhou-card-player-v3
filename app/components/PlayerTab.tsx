@@ -269,7 +269,9 @@ export default function PlayerTab({
               regeneratePlayingOrder(false);
             }}>{GetLocalizedString(Localization.PlayerTabSort)}</Button>
           </Stack>
-          <Stack direction="row" spacing={1} width="100%" alignItems="center" justifyContent="center">
+          <Stack direction="row" spacing={1} width="100%" alignItems="center" justifyContent="center"
+            sx={{ flexWrap: "wrap", rowGap: 1 }}
+          >
             <Button 
               variant={playbackSetting.randomStartPosition ? "contained" : "outlined"}
               sx={{ width: "8rem", fontFamily: NoFontFamily }}
@@ -290,6 +292,17 @@ export default function PlayerTab({
                 });
               }}
             >{GetLocalizedString(Localization.PlayerTabCountdown)}</Button>
+            <Button
+              variant={playbackSetting.pauseOnSwitch ? "contained" : "outlined"}
+              sx={{ width: "8rem", fontFamily: NoFontFamily }}
+              title="打开后，上一首 / 下一首（含 [ ] 快捷键）只换曲目不播放，按播放键才开始"
+              onClick={() => {
+                setPlaybackSetting({
+                  ...playbackSetting,
+                  pauseOnSwitch: !playbackSetting.pauseOnSwitch,
+                });
+              }}
+            >{GetLocalizedString(Localization.PlayerTabSwitchPaused)}</Button>
             <Button
               variant={displayHidden ? "contained" : "outlined"}
               sx={{ width: "8rem", fontFamily: NoFontFamily }}

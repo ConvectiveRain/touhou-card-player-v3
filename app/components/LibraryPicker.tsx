@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Box, Button, Divider, Drawer, MenuItem, Select, Stack, Typography,
+  Box, Button, Divider, Drawer, MenuItem, Select, Stack, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
 import Image from "next/image";
 import { GlobalData, MusicSelectionMap } from "../types/Configs";
@@ -10,6 +10,7 @@ import { cardImageUrl } from "../lib/cardImages";
 import { parseMusicInfo } from "../lib/music";
 import { getFeatures } from "../lib/features";
 import { fetchJson } from "../lib/fetchJson";
+import { MusicScope } from "../lib/originalScope";
 import { NoFontFamily, theme } from "./Theme";
 
 /**
@@ -45,6 +46,9 @@ export interface LibraryPickerProps {
   musicSelection: MusicSelectionMap;
   currentCharacterId: string;
   playingOrder: string[];
+  /** 全部曲目 / 仅单原曲；曲目范围由上层过滤数据集决定，这里只管开关。 */
+  scope: MusicScope;
+  setScope: (scope: MusicScope) => void;
   setMusicSelection: (selection: MusicSelectionMap) => void;
   setPlayingOrder: (order: string[]) => void;
   setCurrentCharacterId: (id: string) => void;
@@ -134,15 +138,27 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.data, library, circle, keyword, props.playingOrder]);
 
+  // 每张专辑在当前模式下真正能播的曲目：多归属曲目在「仅单原曲」里已被摘掉，
+  // 上游数据里没人认领的曲目（没有原曲信息）本来也点不动，一并排除。
+  const albumTracks = useMemo(() => {
+    const map = new Map<string, string[]>();
+    (library?.albums ?? []).forEach((album) => {
+      map.set(album.id, album.music.filter((musicId) => characterOfMusic.has(musicId)));
+    });
+    return map;
+  }, [library, characterOfMusic]);
+
   const albums = useMemo(() => {
     if (!library) { return []; }
     const lowered = keyword.toLowerCase();
     return library.albums.filter((album) => {
       if (circle !== AllCircles && album.circle !== circle) { return false; }
+      // 单原曲模式下把整张都出局的专辑藏起来（和本地播放器一致）
+      if (props.scope === "single" && (albumTracks.get(album.id)?.length ?? 0) === 0) { return false; }
       if (!keyword) { return true; }
       return album.name.toLowerCase().includes(lowered) || album.circle.toLowerCase().includes(lowered);
     });
-  }, [library, circle, keyword]);
+  }, [library, circle, keyword, albumTracks, props.scope]);
 
   // 点角色卡：不在队列里就加进去，然后切到它
   const pickCharacter = (characterId: string) => {
@@ -207,6 +223,26 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   return (
     <>
     <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
+      <ToggleButtonGroup
+        exclusive
+        size="small"
+        value={props.scope}
+        disabled={props.disabled}
+        onChange={(_event, next: MusicScope | null) => { if (next) { props.setScope(next); } }}
+        sx={{
+          "& .MuiToggleButton-root": {
+            fontFamily: NoFontFamily, fontSize: "0.78em", padding: "2px 8px", textTransform: "none",
+          },
+        }}
+      >
+        <ToggleButton value="all" title="全部曲目：一首曲子改编了多首原曲时，会同时算到涉及的每位角色名下">
+          全部曲目
+        </ToggleButton>
+        <ToggleButton value="single" title="仅单原曲（默认）：只保留角色归属唯一的曲子——角色曲恰好一首，或多首角色曲全指向同一位角色">
+          仅单原曲
+        </ToggleButton>
+      </ToggleButtonGroup>
+      <Divider orientation="vertical" flexItem />
       <Select
         size="small"
         value={circle}
@@ -379,7 +415,12 @@ export default function LibraryPicker(props: LibraryPickerProps) {
 
           {topPanel === "albums" && (
             <Box sx={{ maxHeight: "34vh", overflowY: "auto", order: 1 }}>
-              {albums.map((album) => (
+              {albums.map((album) => {
+                // 单原曲模式下这里显示的是切过去真能排进队列的首数；全部曲目保持原来的数字
+                const tracks = props.scope === "single"
+                  ? (albumTracks.get(album.id) ?? [])
+                  : album.music;
+                return (
                 <Box
                   key={album.id}
                   onClick={() => { if (!props.disabled) { pickAlbum(album); } }}
@@ -405,9 +446,15 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                     {album.name}
                   </Typography>
                   <Typography sx={{ ...smallText, fontSize: "0.72em" }}>{album.circle}</Typography>
-                  <Typography sx={{ ...smallText, fontSize: "0.72em" }}>{album.music.length} 首</Typography>
+                  <Typography sx={{ ...smallText, fontSize: "0.72em" }}>{tracks.length} 首</Typography>
                 </Box>
-              ))}
+                );
+              })}
+              {albums.length === 0 && (
+                <Typography sx={{ ...smallText, padding: "6px" }}>
+                  没有专辑。换个社团 / 关键词，或切到「全部曲目」。
+                </Typography>
+              )}
             </Box>
           )}
         </Box>
