@@ -697,6 +697,7 @@
     "レティ・ホワイトロック": {
         "card": "レティ.png",
         "music": [
+            "東方妖々夢 ～ Perfect Cherry Blossom/上海アリス幻樂団 - クリスタライズシルバー.mp3",
             "凋叶棕 - 娶/ミノキチグリーフシンドローム.mp3",
             "森羅万象 - 東方連歌/白銀の夜明け.mp3",
             "四面楚歌 - 秘封祭 オリジナル・サウンド・トラック/To the spring.mp3",
@@ -753,6 +754,7 @@
     "リリーホワイト": {
         "card": "リリー.png",
         "music": [
+            "東方妖々夢 ～ Perfect Cherry Blossom/上海アリス幻樂団 - 天空の花の都.mp3",
             "凋叶棕 - 祭/幻想浪漫綺行.mp3",
             "凋叶棕 - 宴/幻想浪漫綺行（Another Sky Remix）.mp3",
             "凋叶棕 - 彩/授かりしその白亜.mp3",
@@ -782,6 +784,7 @@
             "リリカ.png"
         ],
         "music": [
+            "東方妖々夢 ～ Perfect Cherry Blossom/上海アリス幻樂団 - 幽霊楽団　～ Phantom Ensemble.mp3",
             "凋叶棕 - 喩/プリズムリバー練習曲第一番“はじめての合奏”.mp3",
             "森羅万象 - 東方連歌/over drive!.mp3",
             "森羅万象 - M other/カルテット.mp3",
@@ -951,7 +954,7 @@
             "完全憑依ディスコグラフィ/上海アリス幻樂団 - 憑坐は夢と現の間に　～ Necro-Fantasia.mp3",
             "夢違科学世紀 ～ Changeability of Strange Dream/07. 夜が降りてくる ～ Evening Star.mp3",
             "大空魔術 ～ Magical Astronomy/09. ネクロファンタジア.mp3",
-            "七夕坂夢幻能 ~ Taboo Japan Disentanglement/上海アリス幻樂団 - 憑坐は夢と現の間に 〜 Necro-Fantasia",
+            "七夕坂夢幻能 ~ Taboo Japan Disentanglement/上海アリス幻樂団 - 憑坐は夢と現の間に 〜 Necro-Fantasia.mp3",
             "凋叶棕 - 祭/Evening Waltz.mp3",
             "凋叶棕 - 宴/夜を撃ち落とす.mp3",
             "凋叶棕 - 謡/ヤクモ・ビート.mp3",
@@ -1320,6 +1323,7 @@
     "メディスン・メランコリー": {
         "card": "メディスン.png",
         "music": [
+            "東方花映塚 ～ Phantasmagoria of Flower View/上海アリス幻樂団 - ポイズンボディ　～ Forsaken Doll.mp3",
             "凋叶棕 - 遙/弦奏交響曲「ポイズンボディ」.mp3",
             "凋叶棕 - 辿／誘/she's purity.mp3",
             "凋叶棕 - 辿／誘/「アリス」とぼくの理想的世界選択論.mp3",
@@ -1344,6 +1348,7 @@
     "風見幽香": {
         "card": "幽香.png",
         "music": [
+            "東方花映塚 ～ Phantasmagoria of Flower View/上海アリス幻樂団 - 今昔幻想郷　～ Flower Land.mp3",
             "凋叶棕 - 遙/そしていつかまた出逢って.mp3",
             "凋叶棕 - 彩/いとおしきものに、うつくしきものに.mp3",
             "凋叶棕 - 改/そしていつかまた出逢って ～ Eternal Flower.mp3",
@@ -1448,6 +1453,7 @@
     "秋静葉": {
         "card": "静葉.png",
         "music": [
+            "東方風神録 ～ Mountain of Faith/上海アリス幻樂団 - 人恋し神様　～ Romantic Fall.mp3",
             "凋叶棕 - 望/人恋し、秋恋し.mp3"
         ],
         "searchNames": [
@@ -1463,6 +1469,7 @@
     "秋穣子": {
         "card": "穣子.png",
         "music": [
+            "東方風神録 ～ Mountain of Faith/上海アリス幻樂団 - 稲田姫様に叱られるから.mp3",
             "森羅万象 - Doppel/琥珀の海に地球浮かべたら.mp3",
             "森羅万象 - シンラミュージアム/1／8000000.mp3",
             "Foxtail-Grass Studio - Lupinus 幻想写景 -風-/秋鳴りシンフォニー.mp3",
@@ -1584,6 +1591,7 @@
     "犬走椛": {
         "card": "椛.png",
         "music": [
+            "東方風神録 ～ Mountain of Faith/上海アリス幻樂団 - フォールオブフォール　～ 秋めく滝.mp3",
             "森羅万象 - あの日の夢のアリス/汝は白狼なりや？.mp3",
             "森羅万象 - 第15回博麗神社例大祭会場限定おまけCD/汝は白狼なりや.mp3",
             "森羅万象 - あの日の夢のアリス DAY DREAM/汝は白狼なりや？.mp3",
@@ -1818,6 +1826,7 @@
     "キスメ": {
         "card": "キスメ.png",
         "music": [
+            "東方地霊殿 ～ Subterranean Animism/上海アリス幻樂団 - 暗闇の風穴.mp3",
             "凋叶棕 - 奉/地霊 「幻想郷縁起 封ジラレシ妖怪達之頁」.mp3",
             "Foxtail-Grass Studio - ほしくずアテリア/泡沫の夢、地底の浪漫.mp3",
             "狐の工作室 - 東方幻想界 -地霊殿の音-/地底のいりぐち.mp3",
@@ -1914,6 +1923,7 @@
     "古明地さとり": {
         "card": "さとり.png",
         "music": [
+            "東方地霊殿 ～ Subterranean Animism/上海アリス幻樂団 - 少女さとり　～ 3rd eye.mp3",
             "凋叶棕 - 宴/弦奏交響曲「少女さとり」.mp3",
             "凋叶棕 - 遙/盲目の笑顔.mp3",
             "凋叶棕 - 望/Unprivileged Access.mp3",
@@ -2236,6 +2246,7 @@
     "寅丸星": {
         "card": "星.png",
         "music": [
+            "東方星蓮船 ～ Undefined Fantastic Object/上海アリス幻樂団 - 虎柄の毘沙門天.mp3",
             "凋叶棕 - 謡/Farewell.mp3",
             "凋叶棕 - 騙/Fragile Idol-Worship.mp3",
             "森羅万象 - パライソ/be praying.mp3",
@@ -2453,6 +2464,7 @@
     "蘇我屠自古": {
         "card": "屠自古.png",
         "music": [
+            "東方神霊廟 ～ Ten Desires/上海アリス幻樂団 - 夢殿大祀廟.mp3",
             "森羅万象 - 悪戯センセーション/私が蝶になったはなし.mp3",
             "森羅万象 - 博麗神社例大祭20 会場限定おまけCD/私が蝶になったはなし feat.lily-an.mp3"
         ],
@@ -2722,6 +2734,7 @@
     "堀川雷鼓": {
         "card": "雷鼓.png",
         "music": [
+            "東方輝針城 ～ Double Dealing Character/上海アリス幻樂団 - 始原のビート　～ Pristine Beat.mp3",
             "凋叶棕 - 伝/狂言「波鼓」.mp3",
             "ZYTOKINE - I, SCREAM/2 GATHER BEAT.mp3",
             "ZYTOKINE - Liquid Total Reflection -THE BEST of ZYTOKINE-CYTOKINE2-/2 GATHER BEAT.mp3",
@@ -3340,6 +3353,7 @@
     "飯綱丸龍": {
         "card": "龍.png",
         "music": [
+            "東方虹龍洞 ～ Unconnected Marketeers/上海アリス幻樂団 - 星降る天魔の山.mp3",
             "凋叶棕 - Q/星空に消ゆ.mp3",
             "ZYTOKINE - HUNDRED DUOVIGINTILLION ARROWS/IRIS.mp3"
         ],
@@ -3434,6 +3448,7 @@
     "孫美天": {
         "card": "孫美天.png",
         "music": [
+            "東方獣王園 ～ Unfinished Dream of All Living Ghost/上海アリス幻樂団 - タイニーシャングリラ.mp3",
             "凋叶棕 - 界/空を想う地で.mp3",
             "ZYTOKINE - ZOO/LOST HORIZON.mp3"
         ],
@@ -3450,6 +3465,7 @@
     "三頭慧ノ子": {
         "card": "慧ノ子.png",
         "music": [
+            "東方獣王園 ～ Unfinished Dream of All Living Ghost/上海アリス幻樂団 - 勇敢で有閑な妖獣.mp3",
             "ZYTOKINE - ZOO/Zap Out Orbit.mp3"
         ],
         "searchNames": [
@@ -3465,6 +3481,7 @@
     "天火人ちやり": {
         "card": "天火人ちやり.png",
         "music": [
+            "東方獣王園 ～ Unfinished Dream of All Living Ghost/上海アリス幻樂団 - 吸血怪獣チュパカブラ.mp3",
             "凋叶棕 - 牟/グラッジーモンスター.mp3",
             "ZYTOKINE - ZOO/GARNET ROUGE.mp3"
         ],
@@ -3481,6 +3498,7 @@
     "豫母都日狭美": {
         "card": "豫母都日狭美.png",
         "music": [
+            "東方獣王園 ～ Unfinished Dream of All Living Ghost/上海アリス幻樂団 - 振り向かない黄泉の道.mp3",
             "ZYTOKINE - ZOO/L-OVERLOAD.mp3"
         ],
         "searchNames": [
@@ -3496,6 +3514,7 @@
     "日白残無": {
         "card": "日白残無.png",
         "music": [
+            "東方獣王園 ～ Unfinished Dream of All Living Ghost/上海アリス幻樂団 - 逸脱者達の無礙光　～ Kingdam of Nothingness..mp3",
             "森羅万象 - 東方いえるかな/東方いえるかな.mp3",
             "森羅万象 - 東方いえるかな/東方いえるかな(Instrumental).mp3",
             "森羅万象 - 東方言えるかな/東方言えるかな.mp3",
@@ -3918,6 +3937,7 @@
     "ルナチャイルド": {
         "card": "ルナチャイルド.png",
         "music": [
+            "東方三月精 ～ Eastern and Little Nature Deity/夜だから眠れない.mp3",
             "凋叶棕 - 蒐/サプライジング・エンカウンター.mp3",
             "凋叶棕 - Q/霧の中の怪異.mp3",
             "凋叶棕 - 噤/ツキノオトシゴ.mp3"
@@ -3936,6 +3956,7 @@
     "スターサファイア": {
         "card": "スターサファイア.png",
         "music": [
+            "東方三月精 ～ Eastern and Little Nature Deity/妖精燦々として.mp3",
             "凋叶棕 - 廻/あいやこれまで！.mp3"
         ],
         "searchNames": [
