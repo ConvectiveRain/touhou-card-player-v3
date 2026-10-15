@@ -37,6 +37,8 @@ type LibraryData = {
 const AllCircles = "全部";
 const CardWidth = 92;
 const CardHeight = Math.round(CardWidth / (703 / 1000));
+/** 面板宽度；宽屏时页面内容整体左移这么多，面板就不会盖住任何东西 */
+const DrawerWidth = 400;
 
 export interface LibraryPickerProps {
   data: GlobalData;
@@ -64,6 +66,16 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       .catch(() => { if (!cancelled) { setLibrary(null); } });
     return () => { cancelled = true; };
   }, []);
+
+  // 宽屏打开面板时给 body 留出右边距，让面板与内容并排而不是压在内容上
+  useEffect(() => {
+    const wide = typeof window !== "undefined" && window.innerWidth >= 900;
+    const previous = document.body.style.paddingRight;
+    if (open && wide) {
+      document.body.style.paddingRight = `${DrawerWidth}px`;
+    }
+    return () => { document.body.style.paddingRight = previous; };
+  }, [open]);
 
   // musicId -> characterId，用来判断一张专辑里的某首曲子该由谁唱
   const characterOfMusic = useMemo(() => {
@@ -243,7 +255,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
           "& .MuiDrawer-paper": {
             top: "64px",
             height: "calc(100% - 64px)",
-            width: { xs: "100%", sm: 420 },
+            width: { xs: "100%", md: DrawerWidth },
             maxWidth: "100%",
             backgroundColor: theme.custom.mainTabBackground,
             borderLeft: "1px solid",
