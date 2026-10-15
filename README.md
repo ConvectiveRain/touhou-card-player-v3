@@ -63,6 +63,7 @@ app/
     format.ts              clock formatting
     persistence.ts         every localStorage key, with validation
     features.ts            ?g / ?r2 / ?locale / ?cheatcode feature flags, read once
+    joinLink.ts            builds and reads ?code / ?role PvP join links
     playbackActions.ts     transport rules shared by the buttons and the hotkeys
     useGameData.ts         character + music dataset, the user's selection, dataset actions
     useMusicPlayer.ts      audio engine: playback, transport, countdown bell
@@ -142,6 +143,7 @@ Four conventions are worth knowing when making changes:
 - **CPU opponent**: Battle an automated rival to keep skills sharp offline.
 - **Remote opponent (WebRTC via PeerJS)**:
   - One player acts as server, sharing a join code for other players (can be 1 opponent for 1v1 or multiple for a melee mode!) to connect.
+	- The server can also copy a ready-made join link for an opponent or an observer (`?code=...&role=client|observer`); opening it goes straight to the game board with the role and share code prefilled, so the recipient only clicks Connect.
 	- Settings sync automatically on connection and again when the game begins.
 	- Set your display name so friends can find you in the lobby list.
 	- Card handoffs are resilient, ensuring transfers finish even on unstable links.

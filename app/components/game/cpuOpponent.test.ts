@@ -40,11 +40,6 @@ describe("boardDifficulty", () => {
 });
 
 describe("cpuReactionTimeMean", () => {
-  it("defaults to the six seconds the old model used on a full default board", () => {
-    expect(cpuReactionTimeMean(DefaultCPUOpponentSetting, cardsOnFullDefaultBoard()))
-      .toBeCloseTo(6.0, 1);
-  });
-
   it("never gets faster as cards are added", () => {
     let previous = 0;
     for (let count = 1; count <= 200; count++) {

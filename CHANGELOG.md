@@ -12,5 +12,6 @@
 * Updated card of "ニナ" and "馴子".
 * Adjust CPU match settings to be more realisitic.
 * Added Japanese locale (`?locale=ja`, or auto-detected from the browser language).
+* Added PvP join links: the server can copy a client/observer link (`?code=...&role=...`) that opens the game board with the role and share code prefilled.
 
 ## TODO

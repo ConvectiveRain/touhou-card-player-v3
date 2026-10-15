@@ -12,20 +12,20 @@ import GameTab from "./components/GameTab";
 import ConfigTab from "./components/ConfigTab";
 import { GetLocalizedString, Localization } from "./types/Localization";
 import { PagePRNG } from "./types/PagePrng";
-import { useWindowWidth } from "./lib/useWindowWidth";
+import { useIsSmallScreen } from "./lib/useWindowWidth";
 import { useGameData } from "./lib/useGameData";
 import { useMusicPlayer } from "./lib/useMusicPlayer";
 import { playbackToggleAction } from "./lib/playbackActions";
 import { usePlaybackHotkeys } from "./lib/usePlaybackHotkeys";
-
-/** Width below which the secondary tabs are hidden to keep the header on one line. */
-const SmallScreenWidth = 600;
+import { getFeatures } from "./lib/features";
+import { resolveJoinLink } from "./lib/joinLink";
 
 // The tab order used by both the header buttons and the tab container.
 const PlayerTabIndex = 0;
 const ListTabIndex = 1;
 const ConfigTabIndex = 2;
-const AboutTabIndex = 3;
+/** The game board tab; its header button is labelled `TabNameAbout` ("Match"). */
+const GameTabIndex = 3;
 
 /**
  * A header button. Tabs pass `onClick` that selects them; the extra buttons (Alice, Source code)
@@ -114,7 +114,7 @@ export default function Home() {
     ready,
   });
 
-  const isOnSmallerScreen = useWindowWidth() < SmallScreenWidth;
+  const isOnSmallerScreen = useIsSmallScreen();
 
   // `[` / `]` / space drive the transport, but only where the transport is on screen: the
   // Player and List tabs, and never while a match owns the music.
@@ -131,17 +131,29 @@ export default function Home() {
     onTogglePlay: togglePlay,
   });
 
-  // The About tab previews music, so the out-of-game countdown is suspended while it is open and
-  // restored when the user leaves. Driving it from the active tab keeps the setting untouched by
-  // navigation itself.
+  // The game board owns the music while it is open, so the out-of-game countdown is suspended
+  // there and restored when the user leaves. Driving it from the active tab keeps the setting
+  // untouched by navigation itself.
   useEffect(() => {
-    if (activeTab === AboutTabIndex) {
+    if (activeTab === GameTabIndex) {
       player.suspendOutOfGameCountdown();
     } else {
       player.restoreOutOfGameCountdown();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // A PvP join link (`?code=…&role=client|observer`) opens the game board so the recipient lands
+  // on the join panel. Applied after mount, not in the initial state, to keep the server-rendered
+  // markup identical to the first client render. Small screens have no game mode at all, so the
+  // link is ignored there rather than revealing a tab the header deliberately hides.
+  useEffect(() => {
+    if (isOnSmallerScreen) { return; }
+    if (resolveJoinLink(getFeatures().code, getFeatures().role) !== null) {
+      setActiveTab(GameTabIndex);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectAliceIfQueued = () => {
     if (!playingOrder.includes(AliceCharacterId)) { return; }
@@ -214,8 +226,8 @@ export default function Home() {
             {!isOnSmallerScreen && (
               <TabButton
                 label={GetLocalizedString(Localization.TabNameAbout)}
-                selected={activeTab === AboutTabIndex}
-                onClick={() => { setActiveTab(AboutTabIndex); }}
+                selected={activeTab === GameTabIndex}
+                onClick={() => { setActiveTab(GameTabIndex); }}
               />
             )}
             <Divider orientation="vertical" flexItem />

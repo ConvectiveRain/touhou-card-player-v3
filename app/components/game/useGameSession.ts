@@ -13,6 +13,10 @@ import type { Event, EventBroadcastPlayerNames, EventChat, EventNotifyName, Even
 import type { OuterRefObject } from "../../types/GameJudge";
 import { MaxDeckColumns, MaxDeckRows } from "../../lib/geometry";
 import { loadPlayerName, savePlayerName } from "../../lib/persistence";
+import { getFeatures } from "../../lib/features";
+import { buildJoinUrl, resolveJoinLink } from "../../lib/joinLink";
+import type { JoinRole } from "../../lib/joinLink";
+import { useIsSmallScreen } from "../../lib/useWindowWidth";
 import { enableCheat, isCheatString } from "../../types/Cheat";
 import { useVersion } from "../../lib/useVersion";
 import { GetLocalizedString, Localization } from "../../types/Localization";
@@ -123,6 +127,8 @@ export type GameSession = {
     connectToServer: () => void;
     regeneratePeerId: () => void;
     copyPeerId: () => void;
+    copyClientJoinUrl: () => void;
+    copyObserverJoinUrl: () => void;
     toggleClientObserver: () => void;
     pickDeckCard: (playerIndex: 0 | 1, cardIndex: number, cardInfo: CardInfo) => void;
     playMusic: () => void;
@@ -214,6 +220,40 @@ export function useGameSession(props: GameSessionProps): GameSession {
       message: message,
     }]);
   }, []);
+
+  /**
+   * The "who is in this room" line. Shared, so the server (which owns the roster) and the
+   * client (which reads it off the broadcast event) word it identically.
+   */
+  const buildParticipantsMessage = useCallback(
+    (settings: Array<{ name: string; isObserver: boolean }>): string => {
+      let message = "";
+      settings.forEach((setting, index) => {
+        message += `${index === 0 ? "" : ", "}${setting.name}`;
+        if (index === 0) {
+          message += ` (${GetLocalizedString(Localization.GameParticipantsServer)})`;
+        } else if (index === judge.myPlayerIndex) {
+          message += ` (${GetLocalizedString(Localization.GameParticipantsYou)})`;
+          if (setting.isObserver) {
+            message += ` (${GetLocalizedString(Localization.GameObserver)})`;
+          }
+        } else if (setting.isObserver) {
+          message += ` (${GetLocalizedString(Localization.GameObserver)})`;
+        } else {
+          message += ` (${GetLocalizedString(Localization.GamePlayer)})`;
+        }
+      });
+      return GetLocalizedString(Localization.GameMessageParticipants) + ": " + message;
+    },
+    [judge],
+  );
+
+  /** Announces the current roster from the server's own player list. */
+  const addParticipantsMessage = useCallback(() => {
+    addSystemChatMessage(buildParticipantsMessage(
+      judge.players.map((player) => ({ name: player.name, isObserver: player.isObserver })),
+    ));
+  }, [judge, buildParticipantsMessage, addSystemChatMessage]);
 
   const applyMyName = useCallback((name: string) => {
     savePlayerName(name);
@@ -413,25 +453,7 @@ export function useGameSession(props: GameSessionProps): GameSession {
 
       case "broadcastPlayerNames": {
         const settingEvent = event as EventBroadcastPlayerNames;
-        let message = "";
-        settingEvent.settings.forEach((setting, index) => {
-          message += `${index === 0 ? "" : ", "}${setting.name}`;
-          if (index === 0) {
-            message += ` (${GetLocalizedString(Localization.GameParticipantsServer)})`;
-          } else if (index === judge.myPlayerIndex) {
-            message += ` (${GetLocalizedString(Localization.GameParticipantsYou)})`;
-            if (setting.isObserver) {
-              message += ` (${GetLocalizedString(Localization.GameObserver)})`;
-            }
-          } else if (setting.isObserver) {
-            message += ` (${GetLocalizedString(Localization.GameObserver)})`;
-          } else {
-            message += ` (${GetLocalizedString(Localization.GamePlayer)})`;
-          }
-        });
-        addSystemChatMessage(
-          GetLocalizedString(Localization.GameMessageParticipants) + ": " + message,
-        );
+        addSystemChatMessage(buildParticipantsMessage(settingEvent.settings));
         break;
       }
 
@@ -443,6 +465,7 @@ export function useGameSession(props: GameSessionProps): GameSession {
             Localization.ChatMessageConnectedFromObserver,
             new Map<string, string>([["clientName", nameEvent.name]]),
           ));
+          addParticipantsMessage();
           break;
         }
 
@@ -490,12 +513,15 @@ export function useGameSession(props: GameSessionProps): GameSession {
           Localization.ChatMessageConnectedFromClient,
           new Map<string, string>([["clientName", nameEvent.name]]),
         ));
+        // The roster is worth announcing on both sides, not just to the client that joined.
+        addParticipantsMessage();
         break;
       }
     }
   }, [
     judge, peer, playbackSetting, setPlaybackSetting, notifyPauseMusic, notifyPlayMusic,
     notifyGameEnd, addSystemChatMessage, markJudgeChanged, clearBoardInteraction,
+    buildParticipantsMessage, addParticipantsMessage,
   ]);
 
   // region effects
@@ -590,6 +616,24 @@ export function useGameSession(props: GameSessionProps): GameSession {
       judge.players[judge.myPlayerIndex].name = storedName;
       markJudgeChanged();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A `?code=…&role=client|observer` deep link switches straight into the matching remote role and
+  // prefills the share code, so the recipient only has to press connect. Runs once: the role is a
+  // starting point, not a lock, so the user can still switch before joining. Skipped on small
+  // screens, where the game board is banned outright and creating a peer would be a pure side
+  // effect on a page the user cannot reach.
+  const isOnSmallerScreen = useIsSmallScreen();
+  useEffect(() => {
+    if (isOnSmallerScreen) { return; }
+    const features = getFeatures();
+    const prefill = resolveJoinLink(features.code, features.role);
+    if (prefill === null) { return; }
+    judge.matchType = prefill.role === "observer" ? MatchType.Observer : MatchType.Client;
+    setRemotePlayerIdInput(prefill.code);
+    peer.ensurePeerNotNull();
+    resetOpponentDeck();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -833,6 +877,15 @@ export function useGameSession(props: GameSessionProps): GameSession {
     }
   }, [peer]);
 
+  const copyJoinUrl = useCallback((role: JoinRole) => {
+    const code = peer.peer?.id;
+    if (!code || typeof window === "undefined") { return; }
+    navigator.clipboard.writeText(buildJoinUrl(window.location.href, code, role));
+  }, [peer]);
+
+  const copyClientJoinUrl = useCallback(() => { copyJoinUrl("client"); }, [copyJoinUrl]);
+  const copyObserverJoinUrl = useCallback(() => { copyJoinUrl("observer"); }, [copyJoinUrl]);
+
   const pickDeckCard = useCallback((playerIndex: 0 | 1, cardIndex: number, cardInfo: CardInfo) => {
     judge.notifyPickEvent(new PickEvent(
       Date.now() - judge.turnStartedAt(), judge.myPlayerIndex, cardInfo,
@@ -949,6 +1002,8 @@ export function useGameSession(props: GameSessionProps): GameSession {
       connectToServer,
       regeneratePeerId,
       copyPeerId,
+      copyClientJoinUrl,
+      copyObserverJoinUrl,
       toggleClientObserver,
       pickDeckCard,
       playMusic,

@@ -129,6 +129,16 @@ const Localization = {
     "复制到剪贴板",
     "クリップボードにコピー"
   ),
+  GameConnectionCopyClientLink: u(
+    "Copy Client Link",
+    "复制玩家链接",
+    "クライアントリンクをコピー"
+  ),
+  GameConnectionCopyObserverLink: u(
+    "Copy Observer Link",
+    "复制观战链接",
+    "観戦リンクをコピー"
+  ),
   GameConnectionConnect: u(
     "Connect",
     "连接",
