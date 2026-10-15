@@ -1096,6 +1096,23 @@ class GameJudge {
     }
   }
 
+  /**
+   * How many cards are currently face-up on the playground: every non-empty slot of every deck.
+   * The CPU reads this to scale its reaction time and mistake rate, so a crowded board is harder
+   * for it than a nearly cleared one.
+   */
+  playgroundCardCount(): number {
+    let count = 0;
+    for (const player of this.players) {
+      for (const cardInfo of player.deck) {
+        if (cardInfo.characterId !== null) {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  }
+
   simulateCPUOpponentPick(mistake: boolean): void {
     if (this.matchType !== MatchType.CPU) {
       return;

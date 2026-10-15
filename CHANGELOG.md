@@ -13,3 +13,4 @@
 
 ## TODO
 * Adjust CPU match settings to be more realisitic.
+* Japanese locale.

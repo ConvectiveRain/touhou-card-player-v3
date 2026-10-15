@@ -1,6 +1,6 @@
 "use client";
 
-import { Slider, TextField, Typography } from "@mui/material";
+import { Button, Slider, Stack, TextField, Typography } from "@mui/material";
 import {
   AddRounded, Casino, ClassRounded, ClearRounded, EastRounded, FilterList,
   PauseRounded, Pending, PlayArrowRounded, RemoveRounded, ShuffleRounded,
@@ -21,6 +21,11 @@ import { GameJudgeState, MatchType } from "../../types/GameTypes";
 import type { GameJudge } from "../../types/GameJudge";
 import type { NextTurnButtonModel } from "./gameButtonModels";
 import { clamp } from "../../lib/math";
+import {
+  CPUOpponentPresets, cpuMistakeRate, cpuReactionTimeMean, cpuReactionTimeStdDev,
+  matchingCPUOpponentPreset,
+} from "./cpuOpponent";
+import type { CPUOpponentPresetId, CPUOpponentSetting } from "./cpuOpponent";
 import { GameTimerDisplay } from "./GameTimerDisplay";
 import type { GameTimerDisplayHandle } from "./GameTimerDisplay";
 import type { BoardLayout, DeckColumnVisibility } from "../../lib/geometry";
@@ -36,6 +41,25 @@ import { RefObject } from "react";
 const absoluteAt = (x: number, y: number, extra?: object) => ({
   position: "absolute", left: `${x}px`, top: `${y}px`, ...extra,
 });
+
+/**
+ * Percent text field value for a 0..1 fraction. The multiply is done here rather than in the JSX
+ * so preset fractions like 0.018 cannot leak their binary rounding into the input as
+ * "1.7999999999999998".
+ */
+const fractionToPercentInput = (fraction: number): number => Number((fraction * 100).toFixed(2));
+
+/**
+ * One line of the opponent read-out: the average reaction time, the spread around it, and the
+ * error rate, all for a playground of `cardCount` cards.
+ */
+function hintValueText(setting: CPUOpponentSetting, cardCount: number): string {
+  return GetLocalizedString(Localization.GameOpponentSettingHintValue, new Map([
+    ["time", cpuReactionTimeMean(setting, cardCount).toFixed(1)],
+    ["deviation", cpuReactionTimeStdDev(setting, cardCount).toFixed(1)],
+    ["mistake", String(Math.round(cpuMistakeRate(setting, cardCount) * 100))],
+  ]));
+}
 
 // region deck column
 
@@ -498,18 +522,64 @@ export function OpponentDeckControls({
   // region left column: CPU tuning, only meaningful while selecting cards versus the CPU
   const settingsShown = isSelectingCards && judge.matchType === MatchType.CPU;
   const settingsHidden = !settingsShown;
+  // The two board sizes the read-out below the inputs quotes: every card in both decks, and the
+  // single last card. The CPU's reaction time and mistake rate grow with the logarithm of the
+  // card count, which is why a full board plays slower and sloppier than a nearly cleared one.
+  const fullDeckCards = Math.max(layout.deckRows * layout.deckColumns * 2, 1);
+  const activePreset = matchingCPUOpponentPreset(cpuOpponentSetting);
+  const presetLabel: Record<CPUOpponentPresetId, { en: string; zh: string }> = {
+    easy: Localization.GameOpponentPresetEasy,
+    normal: Localization.GameOpponentPresetNormal,
+    hard: Localization.GameOpponentPresetHard,
+    lunatic: Localization.GameOpponentPresetLunatic,
+  };
+
+  // The stack runs top-down from the opponent deck, one field per row. The fields are short and
+  // narrow so the four-line read-out below them still clears the volume control that shares this
+  // gutter on a one-row board.
+  const settingsFieldWidth = 110;
+  const settingsFieldHeight = 30;
+  /** Tighter than `canvasSpacing` between the fields themselves: they are small, so the rows need less air. */
+  const settingsFieldGapY = 5;
+  const settingsFieldAdvance = settingsFieldHeight + settingsFieldGapY;
+  const hintLineSpacing = 19;
+  const hintLineHeight = 20;
+  const hintBlockHeight = hintLineSpacing * 3 + hintLineHeight;
+
   let leftY = layout.opponentDeckTop;
   const settingsTitleY = leftY;
   leftY += 24 + layout.canvasSpacing;
+  const presetRowY = leftY;
+  leftY += 32 + layout.canvasSpacing;
   const reactionLabelY = leftY;
   leftY += 24 + layout.canvasSpacing;
-  const reactionInputY = leftY;
-  leftY += 44 + layout.canvasSpacing;
-  const reactionStdDevInputY = leftY;
-  leftY += 36 + layout.canvasSpacing;
+  const reactionBaseY = leftY;
+  leftY += settingsFieldAdvance;
+  const reactionPerDoublingY = leftY;
+  leftY += settingsFieldAdvance;
+  const reactionSigmaY = leftY;
+  leftY += settingsFieldAdvance;
   const mistakeLabelY = leftY;
   leftY += 24 + layout.canvasSpacing;
-  const mistakeInputY = leftY;
+  const mistakeBaseY = leftY;
+  leftY += settingsFieldAdvance;
+  const mistakePerDoublingY = leftY;
+  leftY += settingsFieldAdvance;
+  const hintY = leftY;
+  /**
+   * Whether the volume control leaves room for the read-out. It shares this gutter and rises as the
+   * board shrinks, because its position is the near deck's top edge; on a board too short and wide
+   * for both, the read-out steps aside rather than drawing over the volume slider.
+   */
+  const hintShown = layout.playerDeckTop >= hintY + hintBlockHeight;
+  // The read-out quotes the same two board sizes the curve is anchored on, in the order the
+  // inputs above it describe the curve: how fast, how variable, how often wrong.
+  const fullDeckHintLabel = GetLocalizedString(Localization.GameOpponentSettingHintFullDeck, new Map([
+    ["cards", String(fullDeckCards)],
+  ]));
+  const fullDeckHintValue = hintValueText(cpuOpponentSetting, fullDeckCards);
+  const lastCardHintLabel = GetLocalizedString(Localization.GameOpponentSettingHintLastCard);
+  const lastCardHintValue = hintValueText(cpuOpponentSetting, 1);
 
   const leftTextSx = {
     userSelect: "none",
@@ -520,12 +590,26 @@ export function OpponentDeckControls({
     fontFamily: NoFontFamily,
   };
   const leftInputSx = {
-    width: "160px",
     userSelect: "none",
     position: "absolute" as const,
     transform: "translateX(-100%)",
     opacity: settingsHidden ? 0.0 : 1.0,
     transition: "opacity 0.3s ease, left 0.3s ease, top 0.3s ease",
+  };
+  /** One short tuning field: narrow, and shorter than MUI's small size so five of them fit. */
+  const settingsFieldSx = {
+    ...leftInputSx,
+    width: `${settingsFieldWidth}px`,
+    "& .MuiInputBase-root": { height: `${settingsFieldHeight}px`, fontSize: 13 },
+    "& .MuiOutlinedInput-input": { padding: `0 10px`, fontSize: 13 },
+    "& .MuiInputLabel-root": { fontSize: 13 },
+  };
+  const hintLineSx = {
+    ...leftTextSx,
+    opacity: settingsHidden || !hintShown ? 0.0 : 1.0,
+    left: `${leftX}px`,
+    whiteSpace: "nowrap" as const,
+    textAlign: "right" as const,
   };
 
   return (
@@ -601,48 +685,91 @@ export function OpponentDeckControls({
       <Typography key="opponent-deck-label" variant="h6" sx={{ ...leftTextSx, left: `${leftX}px`, top: `${settingsTitleY}px` }}>
         {GetLocalizedString(Localization.GameOpponentSettingTitle)}
       </Typography>
-      <Typography key="opponent-deck-instruction" variant="body1" sx={{ ...leftTextSx, left: `${leftX}px`, top: `${reactionLabelY}px` }}>
+      <Stack
+        key="opponent-preset-row"
+        direction="row"
+        spacing={0.5}
+        sx={{ ...leftInputSx, width: "auto", left: `${leftX}px`, top: `${presetRowY}px` }}
+      >
+        {(["easy", "normal", "hard", "lunatic"] as Array<CPUOpponentPresetId>).map((id) => (
+          <Button
+            key={id}
+            size="small"
+            variant={activePreset === id ? "contained" : "outlined"}
+            disabled={settingsHidden}
+            onClick={() => { onCpuOpponentSettingChange({ ...CPUOpponentPresets[id] }); }}
+            sx={{
+              minWidth: 0, px: 0.75, py: 0.25,
+              fontSize: 12, lineHeight: 1.5,
+              textTransform: "none", whiteSpace: "nowrap", fontFamily: NoFontFamily,
+            }}
+          >
+            {GetLocalizedString(presetLabel[id])}
+          </Button>
+        ))}
+      </Stack>
+      <Typography key="opponent-reaction-label" variant="body1" sx={{ ...leftTextSx, left: `${leftX}px`, top: `${reactionLabelY}px` }}>
         {GetLocalizedString(Localization.GameOpponentSettingReactionTime)}
       </Typography>
       <TextField
-        key="opponent-reaction-time-input"
+        key="opponent-reaction-base-input"
         type="number"
         size="small"
-        value={cpuOpponentSetting.reactionTimeMean}
-        label={GetLocalizedString(Localization.GameOpponentSettingReactionTimeMean)}
+        value={cpuOpponentSetting.reactionTimeBase}
+        label={GetLocalizedString(Localization.GameOpponentSettingReactionBase)}
         disabled={settingsHidden}
         onChange={(event) => {
           const value = parseFloat(event.target.value);
           onCpuOpponentSettingChange({
             ...cpuOpponentSetting,
-            reactionTimeMean: clamp(Number.isNaN(value) ? 1.0 : value, 0.5, 10),
+            reactionTimeBase: clamp(Number.isNaN(value) ? 1.5 : value, 0.1, 10),
           });
         }}
         slotProps={{
-          htmlInput: { min: 0.5, max: 10, step: 0.5 },
+          htmlInput: { min: 0.1, max: 10, step: 0.1 },
           inputLabel: { style: { fontFamily: NoFontFamily } },
         }}
-        sx={{ ...leftInputSx, left: `${leftX}px`, top: `${reactionInputY}px` }}
+        sx={{ ...settingsFieldSx, left: `${leftX}px`, top: `${reactionBaseY}px` }}
+      />
+      <TextField
+        key="opponent-reaction-per-doubling-input"
+        type="number"
+        size="small"
+        value={cpuOpponentSetting.reactionTimePerDoubling}
+        label={GetLocalizedString(Localization.GameOpponentSettingReactionPerDoubling)}
+        disabled={settingsHidden}
+        onChange={(event) => {
+          const value = parseFloat(event.target.value);
+          onCpuOpponentSettingChange({
+            ...cpuOpponentSetting,
+            reactionTimePerDoubling: clamp(Number.isNaN(value) ? 0.8 : value, 0, 10),
+          });
+        }}
+        slotProps={{
+          htmlInput: { min: 0.0, max: 10, step: 0.05 },
+          inputLabel: { style: { fontFamily: NoFontFamily } },
+        }}
+        sx={{ ...settingsFieldSx, left: `${leftX}px`, top: `${reactionPerDoublingY}px` }}
       />
       <TextField
         key="opponent-reaction-time-stddev-input"
         type="number"
         size="small"
-        value={cpuOpponentSetting.reactionTimeStdDev}
-        label={GetLocalizedString(Localization.GameOpponentSettingReactionTimeStdDev)}
+        value={cpuOpponentSetting.reactionTimeSigma}
+        label={GetLocalizedString(Localization.GameOpponentSettingReactionStdDev)}
         disabled={settingsHidden}
         onChange={(event) => {
           const value = parseFloat(event.target.value);
           onCpuOpponentSettingChange({
             ...cpuOpponentSetting,
-            reactionTimeStdDev: clamp(Number.isNaN(value) ? 0.1 : value, 0, 5),
+            reactionTimeSigma: clamp(Number.isNaN(value) ? 0.25 : value, 0, 2),
           });
         }}
         slotProps={{
-          htmlInput: { min: 0.0, max: 5, step: 0.1 },
+          htmlInput: { min: 0.0, max: 2, step: 0.05 },
           inputLabel: { style: { fontFamily: NoFontFamily } },
         }}
-        sx={{ ...leftInputSx, left: `${leftX}px`, top: `${reactionStdDevInputY}px` }}
+        sx={{ ...settingsFieldSx, left: `${leftX}px`, top: `${reactionSigmaY}px` }}
       />
       <Typography
         key="opponent-mistake-rate-label"
@@ -652,31 +779,73 @@ export function OpponentDeckControls({
         {GetLocalizedString(Localization.GameOpponentSettingMistakeRate)}
       </Typography>
       <TextField
-        key="opponent-mistake-rate-input"
+        key="opponent-mistake-base-input"
         type="number"
         size="small"
-        value={cpuOpponentSetting.mistakeRate * 100.0}
-        label={GetLocalizedString(Localization.GameOpponentSettingMistakeRate)}
+        value={fractionToPercentInput(cpuOpponentSetting.mistakeRateBase)}
+        label={GetLocalizedString(Localization.GameOpponentSettingMistakeBase)}
         disabled={settingsHidden}
         onChange={(event) => {
           const value = parseFloat(event.target.value);
           onCpuOpponentSettingChange({
             ...cpuOpponentSetting,
-            mistakeRate: clamp(Number.isNaN(value) ? 0 : value, 0, 100) / 100,
+            mistakeRateBase: clamp(Number.isNaN(value) ? 0 : value, 0, 100) / 100,
           });
         }}
         slotProps={{
           htmlInput: { min: 0.0, max: 100.0, step: 1.0 },
           inputLabel: { style: { fontFamily: NoFontFamily } },
         }}
-        sx={{ ...leftInputSx, left: `${leftX}px`, top: `${mistakeInputY}px` }}
+        sx={{ ...settingsFieldSx, left: `${leftX}px`, top: `${mistakeBaseY}px` }}
       />
+      <TextField
+        key="opponent-mistake-per-doubling-input"
+        type="number"
+        size="small"
+        value={fractionToPercentInput(cpuOpponentSetting.mistakeRatePerDoubling)}
+        label={GetLocalizedString(Localization.GameOpponentSettingMistakePerDoubling)}
+        disabled={settingsHidden}
+        onChange={(event) => {
+          const value = parseFloat(event.target.value);
+          onCpuOpponentSettingChange({
+            ...cpuOpponentSetting,
+            mistakeRatePerDoubling: clamp(Number.isNaN(value) ? 0 : value, 0, 100) / 100,
+          });
+        }}
+        slotProps={{
+          htmlInput: { min: 0.0, max: 100.0, step: 0.5 },
+          inputLabel: { style: { fontFamily: NoFontFamily } },
+        }}
+        sx={{ ...settingsFieldSx, left: `${leftX}px`, top: `${mistakePerDoublingY}px` }}
+      />
+      <Typography
+        key="opponent-hint-full-deck"
+        variant="body2"
+        sx={{ ...hintLineSx, top: `${hintY}px` }}
+      >
+        {fullDeckHintLabel}
+      </Typography>
+      <Typography
+        key="opponent-hint-full-deck-value"
+        variant="body2"
+        sx={{ ...hintLineSx, top: `${hintY + hintLineSpacing}px` }}
+      >
+        {fullDeckHintValue}
+      </Typography>
+      <Typography
+        key="opponent-hint-last-card"
+        variant="body2"
+        sx={{ ...hintLineSx, top: `${hintY + hintLineSpacing * 2}px` }}
+      >
+        {lastCardHintLabel}
+      </Typography>
+      <Typography
+        key="opponent-hint-last-card-value"
+        variant="body2"
+        sx={{ ...hintLineSx, top: `${hintY + hintLineSpacing * 3}px` }}
+      >
+        {lastCardHintValue}
+      </Typography>
     </>
   );
 }
-
-export type CPUOpponentSetting = {
-  reactionTimeMean: number;
-  reactionTimeStdDev: number;
-  mistakeRate: number;
-};

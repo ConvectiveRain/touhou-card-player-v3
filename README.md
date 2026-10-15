@@ -8,6 +8,24 @@ Touhou Cards V3 is a browser-based deck experience that mixes visual flair with 
 - [English locale](https://lightbulb128.github.io/touhou-card-player-v3/?locale=en)
 - [Use R2 bucket for cards rendering](https://lightbulb128.github.io/touhou-card-player-v3/?r2=1). We use Github Pages images by default.
 
+## What this is
+
+A fan-made Touhou card game that you play by ear, bundled with a music player for the soundtrack it draws on.
+
+- **The game.** Each turn a Touhou track starts playing. Click the card of the character that track
+  belongs to — the first correct pick takes it.
+- **Two ways to win.** *Classic Mode* makes a wrong pick cost you cards and is won by emptying your
+  deck first; *Leisure Mode* ignores wrong picks and is won by holding more cards once the board is
+  cleared.
+- **Opponents.** Play solo as a sandbox, against a CPU rival whose reaction time and mistake rate
+  you set, or against other players — one on one, or a multi-player melee.
+- **The music player.** Queue characters and reorder, shuffle or reset that order, temporarily
+  disable any of them without losing the rest, switch card art or music source, or give one
+  character a custom theme. `[`, `]` and `space` drive playback from the Player and List tabs.
+- **Nothing to install or host.** The deployed site is a static page: the rules run in the browser,
+  matches go peer-to-peer over WebRTC (PeerJS) with one player hosting, and preferences stay in
+  localStorage. Card art and music are credited in the Config tab.
+
 ## Running
 
 ### Development

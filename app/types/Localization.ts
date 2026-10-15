@@ -150,10 +150,26 @@ const Localization = {
   ),
 
   GameOpponentSettingTitle: u("Opponent Setting", "对手设置"),
-  GameOpponentSettingReactionTime: u("Reaction Speed", "反应速度"),
-  GameOpponentSettingReactionTimeMean: u("Mean (s)", "平均（秒）"),
-  GameOpponentSettingReactionTimeStdDev: u("Standard deviation (s)", "标准差（秒）"),
+  GameOpponentSettingReactionTime: u("Reaction Speed (s)", "反应速度（秒）"),
+  GameOpponentSettingReactionBase: u("Base", "基础"),
+  GameOpponentSettingReactionPerDoubling: u("Per doubling", "每翻倍"),
+  GameOpponentSettingReactionStdDev: u("Variability", "波动"),
   GameOpponentSettingMistakeRate: u("Mistake Rate (%)", "失误率（%）"),
+  GameOpponentSettingMistakeBase: u("Base", "基础"),
+  GameOpponentSettingMistakePerDoubling: u("Per doubling", "每翻倍"),
+  GameOpponentSettingHintFullDeck: u(
+    "Full deck ({cards} cards):",
+    "满场（{cards} 张）："
+  ),
+  GameOpponentSettingHintLastCard: u("Last card:", "最后一张："),
+  GameOpponentSettingHintValue: u(
+    "{time}s +/- {deviation}s, {mistake}% mistake",
+    "{time} 秒 ± {deviation} 秒，失误 {mistake}%"
+  ),
+  GameOpponentPresetEasy: u("Easy", "简单"),
+  GameOpponentPresetNormal: u("Normal", "普通"),
+  GameOpponentPresetHard: u("Hard", "困难"),
+  GameOpponentPresetLunatic: u("Lunatic", "狂气"),
 
   GameUnusedCards: u("Unused Cards", "未使用卡牌"),
   

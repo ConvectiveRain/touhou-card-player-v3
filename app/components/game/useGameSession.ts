@@ -18,7 +18,10 @@ import { useVersion } from "../../lib/useVersion";
 import { GetLocalizedString, Localization } from "../../types/Localization";
 import { ChatMessage } from "../ChatBox";
 import type { GameTimerDisplayHandle } from "./GameTimerDisplay";
-import type { CPUOpponentSetting } from "./GameControls";
+import {
+  DefaultCPUOpponentSetting, cpuMistakeRate, sampleCPUReactionTime,
+} from "./cpuOpponent";
+import type { CPUOpponentSetting } from "./cpuOpponent";
 import {
   computeNextTurnButton, computeNextTurnInstruction, computeOpponentButton, computeStartButton,
 } from "./gameButtonModels";
@@ -181,9 +184,7 @@ export function useGameSession(props: GameSessionProps): GameSession {
   const [remotePlayerIdInput, setRemotePlayerIdInput] = useState<string>("");
   const [peerError, setPeerError] = useState<string>("");
   const [cpuOpponentSetting, setCpuOpponentSetting] = useState<CPUOpponentSetting>({
-    reactionTimeMean: 6,
-    reactionTimeStdDev: 0.5,
-    mistakeRate: 0.2,
+    ...DefaultCPUOpponentSetting,
   });
   // A handle, not state: it is never rendered.
   const cpuOpponentClickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -602,11 +603,11 @@ export function useGameSession(props: GameSessionProps): GameSession {
     if (cpuOpponentClickTimeoutRef.current !== null) {
       clearTimeout(cpuOpponentClickTimeoutRef.current);
     }
-    const shouldMistake = Math.random() < cpuOpponentSetting.mistakeRate;
-    // uniform distribution with the configured mean and standard deviation
-    const halfRange = Math.sqrt(12) / 2 * cpuOpponentSetting.reactionTimeStdDev;
-    let delay = cpuOpponentSetting.reactionTimeMean + (Math.random() * 2 - 1) * halfRange;
-    if (delay < 0) { delay = 0; }
+    // The playground decides how hard this turn is: more cards mean a slower scan and a
+    // higher chance of grabbing the wrong one.
+    const cardCount = judge.playgroundCardCount();
+    const shouldMistake = Math.random() < cpuMistakeRate(cpuOpponentSetting, cardCount);
+    const delay = sampleCPUReactionTime(cpuOpponentSetting, cardCount);
     cpuOpponentClickTimeoutRef.current = setTimeout(() => {
       if (judge.matchType === MatchType.CPU && judge.state === GameJudgeState.TurnStart) {
         judge.simulateCPUOpponentPick(shouldMistake);
