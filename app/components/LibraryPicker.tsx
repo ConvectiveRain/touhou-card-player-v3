@@ -129,12 +129,12 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     return Array.isArray(list) ? list : [];
   };
 
-  /** 勾「全部社团」= 清空筛选；从「全部」直接勾某个社团就从它开始。 */
+  /**
+   * 「全部社团」是一个复位入口而不是真正的多选项：点它一律清空筛选（回到全部）。
+   * 空数组 = 不筛；从「全部」直接勾某个社团时，从那个社团开始单独筛。
+   */
   const toggleCircles = (next: Array<string>) => {
-    if (next.includes(AllCircles)) {
-      setCircles(next.length === 1 ? [] : next.filter((name) => name !== AllCircles));
-      return;
-    }
+    if (next.includes(AllCircles)) { setCircles([]); return; }
     setCircles(next);
   };
 
@@ -319,7 +319,12 @@ export default function LibraryPicker(props: LibraryPickerProps) {
           : (circles.length === 1 ? circles[0] : `${circles[0]} 等 ${circles.length} 个社团`))}
         sx={{ fontFamily: NoFontFamily, fontSize: "0.78em", minWidth: "8em", maxWidth: "13em" }}
       >
-        <MenuItem key={AllCircles} value={AllCircles} sx={{ fontFamily: NoFontFamily, fontSize: "0.85em" }}>
+        <MenuItem
+          key={AllCircles}
+          value={AllCircles}
+          title="清除社团筛选，回到全部社团"
+          sx={{ fontFamily: NoFontFamily, fontSize: "0.85em" }}
+        >
           <Checkbox size="small" sx={{ padding: "2px", marginRight: "6px" }} checked={circles.length === 0} />
           {AllCirclesLabel}
         </MenuItem>
