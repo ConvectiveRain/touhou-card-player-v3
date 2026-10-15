@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Box, Button, Divider, Drawer, MenuItem, Select, Stack, ToggleButton, ToggleButtonGroup, Typography,
+  Box, Button, Checkbox, Divider, Drawer, MenuItem, Select, Stack, ToggleButton, ToggleButtonGroup,
+  Typography,
 } from "@mui/material";
 import Image from "next/image";
 import { GlobalData, MusicSelectionMap } from "../types/Configs";
@@ -35,7 +36,9 @@ type LibraryData = {
   characterCircles: Record<string, string[]>;
 };
 
-const AllCircles = "全部";
+/** 社团多选里的「全部社团」哨兵项；它只出现在下拉里，不会进 state——空数组就代表不筛社团。 */
+const AllCircles = "__all_circles__";
+const AllCirclesLabel = "全部社团";
 const CardWidth = 92;
 const CardHeight = Math.round(CardWidth / (703 / 1000));
 /** 面板宽度；宽屏时页面内容整体左移这么多，面板就不会盖住任何东西 */
@@ -65,7 +68,8 @@ type AlbumBrowse = { album: LibraryAlbum; anchor: string };
 
 export default function LibraryPicker(props: LibraryPickerProps) {
   const [library, setLibrary] = useState<LibraryData | null>(null);
-  const [circle, setCircle] = useState<string>(AllCircles);
+  /** 勾选的社团；空数组 = 全部社团（不筛）。 */
+  const [circles, setCircles] = useState<Array<string>>([]);
   const [topPanel, setTopPanel] = useState<"characters" | "albums">("characters");
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
@@ -121,15 +125,26 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   }, [props.data]);
 
   const circleOfCharacter = (characterId: string): string[] => {
-    const circles = library?.characterCircles[characterId];
-    return Array.isArray(circles) ? circles : [];
+    const list = library?.characterCircles[characterId];
+    return Array.isArray(list) ? list : [];
+  };
+
+  /** 勾「全部社团」= 清空筛选；从「全部」直接勾某个社团就从它开始。 */
+  const toggleCircles = (next: Array<string>) => {
+    if (next.includes(AllCircles)) {
+      setCircles(next.length === 1 ? [] : next.filter((name) => name !== AllCircles));
+      return;
+    }
+    setCircles(next);
   };
 
   const characters = useMemo(() => {
     const list: Array<{ id: string; card: string }> = [];
     const lowered = keyword.toLowerCase();
     props.data.characterConfigs.forEach((config, characterId) => {
-      if (circle !== AllCircles && !circleOfCharacter(characterId).includes(circle)) { return; }
+      if (circles.length > 0 && !circleOfCharacter(characterId).some((name) => circles.includes(name))) {
+        return;
+      }
       if (keyword
         && !characterId.toLowerCase().includes(lowered)
         && !(config.searchNames || []).some((name) => name.toLowerCase().includes(lowered))) {
@@ -145,7 +160,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       return ra - rb;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.data, library, circle, keyword, props.playingOrder]);
+  }, [props.data, library, circles, keyword, props.playingOrder]);
 
   // 每张专辑在当前模式下真正能播的曲目：多归属曲目在「仅单原曲」里已被摘掉，
   // 上游数据里没人认领的曲目（没有原曲信息）本来也点不动，一并排除。
@@ -161,13 +176,13 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     if (!library) { return []; }
     const lowered = keyword.toLowerCase();
     return library.albums.filter((album) => {
-      if (circle !== AllCircles && album.circle !== circle) { return false; }
+      if (circles.length > 0 && !circles.includes(album.circle)) { return false; }
       // 单原曲模式下把整张都出局的专辑藏起来（和本地播放器一致）
       if (props.scope === "single" && (albumTracks.get(album.id)?.length ?? 0) === 0) { return false; }
       if (!keyword) { return true; }
       return album.name.toLowerCase().includes(lowered) || album.circle.toLowerCase().includes(lowered);
     });
-  }, [library, circle, keyword, albumTracks, props.scope]);
+  }, [library, circles, keyword, albumTracks, props.scope]);
 
   // 点角色卡：不在队列里就加进去，然后切到它
   const pickCharacter = (characterId: string) => {
@@ -292,14 +307,25 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       </ToggleButtonGroup>
       <Divider orientation="vertical" flexItem />
       <Select
+        multiple
+        displayEmpty
         size="small"
-        value={circle}
+        value={circles}
         disabled={props.disabled}
-        onChange={(event) => { setCircle(event.target.value); }}
-        sx={{ fontFamily: NoFontFamily, fontSize: "0.78em", minWidth: "6.5em" }}
+        onChange={(event) => { toggleCircles(event.target.value as Array<string>); }}
+        // 空数组读作「全部社团」；勾了一个以上就缩写显示
+        renderValue={() => (circles.length === 0
+          ? AllCirclesLabel
+          : (circles.length === 1 ? circles[0] : `${circles[0]} 等 ${circles.length} 个社团`))}
+        sx={{ fontFamily: NoFontFamily, fontSize: "0.78em", minWidth: "8em", maxWidth: "13em" }}
       >
-        {[AllCircles, ...library.circles].map((name) => (
+        <MenuItem key={AllCircles} value={AllCircles} sx={{ fontFamily: NoFontFamily, fontSize: "0.85em" }}>
+          <Checkbox size="small" sx={{ padding: "2px", marginRight: "6px" }} checked={circles.length === 0} />
+          {AllCirclesLabel}
+        </MenuItem>
+        {library.circles.map((name) => (
           <MenuItem key={name} value={name} sx={{ fontFamily: NoFontFamily, fontSize: "0.85em" }}>
+            <Checkbox size="small" sx={{ padding: "2px", marginRight: "6px" }} checked={circles.includes(name)} />
             {name}
           </MenuItem>
         ))}
