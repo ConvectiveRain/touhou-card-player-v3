@@ -35,6 +35,11 @@ const CardCollections: Array<[string, JSX.Element]> = ([
 
 const MusicSources: Array<{ key: string; url: string; description: string }> = ([
   {
+    key: "My Library (Netease)",
+    url: "sources_local.json",
+    description: "你自己的东方同人曲库（凋叶棕 / 森羅万象 / ZYTOKINE 等，来自本地 data.json 的整理结果）。曲目与角色的对应关系取自本地数据，逐首与网易云精确核对后才收录，标题对不上的一律不放。"
+  },
+  {
     key: "Netease 163",
     url: "sources_163.json",
     description: "Music from NetEase Cloud Music (163.com). Note that Netease blocks access from outside China."
