@@ -905,7 +905,8 @@
         "card": "八千慧.png",
         "music": [
             "東方鬼形獣 ～ Wily Beast and Weakest Creature/上海アリス幻樂団 - トータスドラゴン　～ 幸運と不運.mp3",
-            "東方鬼形獣 ～ Wily Beast and Weakest Creature/上海アリス幻樂団 - アンロケイテッドヘル.mp3"
+            "東方鬼形獣 ～ Wily Beast and Weakest Creature/上海アリス幻樂団 - アンロケイテッドヘル.mp3",
+            "霊長新益京　～ Artificial Utopia in Ruins/上海アリス幻樂団 - アンロケイテッドヘル.mp3"
         ],
         "searchNames": ["吉弔八千慧", "Kitcho Yachie", "吉吊八千慧", "jidiao baqianhui"],
         "tags": ["鬼形獣"]
@@ -915,14 +916,18 @@
         "music": [
             "東方鬼形獣 ～ Wily Beast and Weakest Creature/上海アリス幻樂団 - セラミックスの杖刀人.mp3",
             "東方鬼形獣 ～ Wily Beast and Weakest Creature/上海アリス幻樂団 - ビーストメトロポリス.mp3",
-            "東方鬼形獣 ～ Wily Beast and Weakest Creature/上海アリス幻樂団 - エレクトリックヘリテージ.mp3"
+            "東方鬼形獣 ～ Wily Beast and Weakest Creature/上海アリス幻樂団 - エレクトリックヘリテージ.mp3",
+            "霊長新益京　～ Artificial Utopia in Ruins/上海アリス幻樂団 - ビーストメトロポリス.mp3"
         ],
         "searchNames": ["杖刀偶磨弓", "Joutougu Mayumi", "杖刀偶磨弓", "zhangdaou moyong"],
         "tags": ["鬼形獣"]
     },
     "埴安神袿姫": {
         "card": "袿姫.png",
-        "music": "東方鬼形獣 ～ Wily Beast and Weakest Creature/上海アリス幻樂団 - 偶像に世界を委ねて　～ Idoratrize World.mp3",
+        "music": [
+            "東方鬼形獣 ～ Wily Beast and Weakest Creature/上海アリス幻樂団 - 偶像に世界を委ねて　～ Idoratrize World.mp3",
+            "霊長新益京　～ Artificial Utopia in Ruins/上海アリス幻樂団 - 偶像に世界を委ねて　～ Idoratrize World.mp3"
+        ],
         "searchNames": ["埴安神袿姫", "Haniyasushin Keiki", "埴安神袿姬", "zhiyanshen guiji"],
         "tags": ["鬼形獣"]
     },
@@ -940,7 +945,8 @@
         "card": "ミケ.png",
         "music": [
             "東方虹龍洞 ～ Unconnected Marketeers/上海アリス幻樂団 - 大吉キトゥン.mp3",
-            "東方虹龍洞 ～ Unconnected Marketeers/上海アリス幻樂団 - 妖異達の通り雨.mp3"
+            "東方虹龍洞 ～ Unconnected Marketeers/上海アリス幻樂団 - 妖異達の通り雨.mp3",
+            "霊長新益京　～ Artificial Utopia in Ruins/上海アリス幻樂団 - 大吉キトゥン.mp3"
         ],
         "searchNames": ["豪徳寺ミケ", "Goutokuji Mike", "豪德寺三花", "haodesi sanhua"],
         "tags": ["虹龍洞"]
@@ -992,7 +998,8 @@
         "card": "百々世.png",
         "music": [
             "東方虹龍洞 ～ Unconnected Marketeers/上海アリス幻樂団 - 龍王殺しのプリンセス.mp3",
-            "東方虹龍洞 ～ Unconnected Marketeers/上海アリス幻樂団 - 幻想の地下大線路網.mp3"
+            "東方虹龍洞 ～ Unconnected Marketeers/上海アリス幻樂団 - 幻想の地下大線路網.mp3",
+            "霊長新益京　～ Artificial Utopia in Ruins/上海アリス幻樂団 - 幻想の地下大線路網.mp3"
         ],
         "searchNames": ["姫虫百々世", "Himemushi Momoyo", "姬虫百百世", "jichong baibaishi"],
         "tags": ["虹龍洞"]
@@ -1154,7 +1161,7 @@
             "東方錦上京 ～ Fossilized Wonders/上海アリス幻樂団 - どうせなら命を賭けて謎を解け.mp3",
             "東方錦上京 ～ Fossilized Wonders/上海アリス幻樂団 - プレステ・ジョアンの黄金境.mp3"
         ],
-        "searchNames": ["道神馴子", "Doushin Naruko", "道神驯子", "daoshen xunzi"],
+        "searchNames": ["道神馴子", "Doushin Nareko", "道神驯子", "daoshen xunzi"],
         "tags": ["錦上京"]
     },
 
@@ -1163,7 +1170,8 @@
         "music": [
             "東方錦上京 ～ Fossilized Wonders/上海アリス幻樂団 - 鹿狩りのレミニセンス.mp3",
             "東方錦上京 ～ Fossilized Wonders/上海アリス幻樂団 - フォーカラーラビリンス.mp3",
-            "東方錦上京 ～ Fossilized Wonders/上海アリス幻樂団 - ファンタスティックドリフト.mp3"
+            "東方錦上京 ～ Fossilized Wonders/上海アリス幻樂団 - ファンタスティックドリフト.mp3",
+            "霊長新益京　～ Artificial Utopia in Ruins/上海アリス幻樂団 - 鹿狩りのレミニセンス.mp3"
         ],
         "searchNames": ["ユイマン・浅間", "Yuiman Asama", "维缦·浅间", "weiman qianjian"],
         "tags": ["錦上京"]
