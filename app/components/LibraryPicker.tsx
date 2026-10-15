@@ -52,8 +52,13 @@ export interface LibraryPickerProps {
   setMusicSelection: (selection: MusicSelectionMap) => void;
   setPlayingOrder: (order: string[]) => void;
   setCurrentCharacterId: (id: string) => void;
+  /** 点角色卡 / 专辑 / 曲目之后让播放器直接开始放这一首。 */
+  onPlaySelection: () => void;
   disabled?: boolean;
 }
+
+/** 「下面那份曲目列表」现在在看谁：点过角色卡就是这位角色，点过专辑就是这张专辑。 */
+type BrowseTarget = { kind: "character"; id: string } | { kind: "album"; album: LibraryAlbum };
 
 export default function LibraryPicker(props: LibraryPickerProps) {
   const [library, setLibrary] = useState<LibraryData | null>(null);
@@ -62,6 +67,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [trackQuery, setTrackQuery] = useState("");
+  const [browse, setBrowse] = useState<BrowseTarget | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,6 +172,8 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       props.setPlayingOrder([...props.playingOrder, characterId]);
     }
     props.setCurrentCharacterId(characterId);
+    setBrowse({ kind: "character", id: characterId });
+    props.onPlaySelection();
   };
 
   // 点专辑：把这张专辑里的每首曲子交给它对应的角色去唱
@@ -187,6 +195,8 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     props.setMusicSelection(selection);
     props.setPlayingOrder(order);
     if (first !== null) { props.setCurrentCharacterId(first); }
+    setBrowse({ kind: "album", album });
+    props.onPlaySelection();
   };
 
   // 点具体某一首：把该角色切到这一首，并保证它在队列里
@@ -198,16 +208,47 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       props.setPlayingOrder([...props.playingOrder, characterId]);
     }
     props.setCurrentCharacterId(characterId);
+    props.onPlaySelection();
   };
 
-  // 曲目列表：不输关键词时显示「当前角色」的歌，输了就在全部曲目里搜
+  /**
+   * 曲目列表：跟着"点了什么"走——点角色卡看该角色的全部曲目，点专辑看该专辑的全部曲目
+   * （没点过之前跟着当前正在播的角色）。输入关键词时在全部曲目里搜。
+   */
   const shownTracks = useMemo(() => {
     const query = trackQuery.trim().toLowerCase();
-    if (!query) {
-      return allTracks.filter((track) => track.characterId === props.currentCharacterId).slice(0, 300);
+    if (query) {
+      return allTracks.filter((track) => track.haystack.includes(query)).slice(0, 300);
     }
-    return allTracks.filter((track) => track.haystack.includes(query)).slice(0, 300);
-  }, [allTracks, trackQuery, props.currentCharacterId]);
+    if (browse?.kind === "album") {
+      const list = [];
+      for (const musicId of browse.album.music) {
+        const characterId = characterOfMusic.get(musicId);
+        if (!characterId) { continue; }
+        const config = props.data.characterConfigs.get(characterId);
+        const index = config ? config.musics.indexOf(musicId) : -1;
+        if (!config || index < 0) { continue; }
+        const info = parseMusicInfo(musicId);
+        list.push({
+          characterId, index, musicId,
+          title: info.title, album: info.album,
+          haystack: `${info.title} ${info.album} ${characterId}`.toLowerCase(),
+        });
+      }
+      return list.slice(0, 300);
+    }
+    const characterId = browse?.kind === "character" ? browse.id : props.currentCharacterId;
+    return allTracks.filter((track) => track.characterId === characterId).slice(0, 300);
+  }, [allTracks, trackQuery, browse, characterOfMusic, props.data, props.currentCharacterId]);
+
+  // 列表上面那行小字：现在看的是谁 / 哪张专辑
+  const listCaption = trackQuery
+    ? `${shownTracks.length} 首（最多列 300）`
+    : browse?.kind === "album"
+      ? `专辑：${browse.album.name}（${shownTracks.length} 首）`
+      : browse?.kind === "character"
+        ? `角色：${browse.id}（${shownTracks.length} 首）`
+        : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首）`;
 
   if (!library) { return null; }
 
@@ -327,7 +368,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
               <input
                 value={trackQuery}
                 onChange={(event) => { setTrackQuery(event.target.value); }}
-                placeholder="搜曲名 / 专辑 / 角色；留空则显示当前角色的全部曲目"
+                placeholder="搜曲名 / 专辑 / 角色；留空则显示所点角色或专辑的全部曲目"
                 style={{
                   flex: 1, padding: "4px 8px", fontSize: "0.85em",
                   backgroundColor: "transparent", color: "inherit",
@@ -335,14 +376,16 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                 }}
               />
               <Typography sx={smallText}>
-                {trackQuery ? `${shownTracks.length} 首（最多列 300）` : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首）`}
+                {listCaption}
               </Typography>
           </Stack>
 
           <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", order: 4 }}>
               {shownTracks.length === 0 && (
                 <Typography sx={{ ...smallText, padding: "6px" }}>
-                  没有曲目。先点一张角色卡，或换个关键词。
+                  {browse?.kind === "album"
+                    ? "这张专辑在当前曲目范围里没有可播的曲目。"
+                    : "没有曲目。先点一张角色卡，或换个关键词。"}
                 </Typography>
               )}
               {shownTracks.map((track) => {
@@ -420,6 +463,8 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                 const tracks = props.scope === "single"
                   ? (albumTracks.get(album.id) ?? [])
                   : album.music;
+                // 正在看的这张专辑高亮一下
+                const browsing = browse?.kind === "album" && browse.album.id === album.id;
                 return (
                 <Box
                   key={album.id}
@@ -427,6 +472,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                   sx={{
                     display: "flex", alignItems: "center", gap: 1, padding: "3px 6px",
                     cursor: props.disabled ? "default" : "pointer", borderRadius: 1,
+                    backgroundColor: browsing ? "rgba(193,72,72,0.28)" : "transparent",
                     "&:hover": { backgroundColor: "rgba(255,255,255,0.08)" },
                   }}
                 >

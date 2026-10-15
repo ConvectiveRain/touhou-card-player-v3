@@ -56,6 +56,8 @@ export type MusicPlayerStore = {
   restoreOutOfGameCountdown: () => void;
   play: () => void;
   pause: () => void;
+  /** 点卡片 / 列表行：换到这一首并立刻开始播放（不改变曲目选择本身）。 */
+  playSelection: () => void;
   previous: () => void;
   next: () => void;
   setPlaybackTime: (time: number) => void;
@@ -181,6 +183,23 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
       setPlaybackState(PlaybackState.Stopped);
     }
   }, [clearPauseTimeout]);
+
+  /**
+   * 点卡片 / 列表行时的「换到这首并开始播」。
+   *
+   * 曲目换了以后由加载完成后的 loadeddata 负责真正出声（倒计时、随机位置这些设置照旧生效），
+   * 所以这里只把状态置为播放；点的正好是已经加载好的这一首（src 不会变、也就不会再发
+   * loadeddata）时，直接调 play()。点击处理器里读到的 currentCharacterId 还是切换前的值，
+   * 正好用来判断"要不要等新曲目加载"。
+   */
+  const playSelection = useCallback(() => {
+    setPlaybackState(PlaybackState.Playing);
+    const audio = audioRef.current;
+    const sourceUrl = currentCharacterId === "" ? null : getMusicSourceUrl(currentCharacterId);
+    if (audio && sourceUrl !== null && audio.getAttribute("src") === sourceUrl) {
+      audio.play().catch((error) => { console.log("Playback was blocked:", error); });
+    }
+  }, [currentCharacterId, getMusicSourceUrl]);
 
   /** Pauses without marking the track stopped, so a later play resumes where it left off. */
   const pauseForGame = useCallback(() => {
@@ -364,6 +383,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     restoreOutOfGameCountdown,
     play,
     pause,
+    playSelection,
     previous,
     next,
     setPlaybackTime,

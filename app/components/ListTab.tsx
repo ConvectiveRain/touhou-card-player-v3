@@ -20,6 +20,8 @@ export interface ListTabProps {
   volume: number;
   setCurrentCharacterId: (id: string) => void;
   setCharacterTemporaryDisabled: (map: Map<string, boolean>) => void;
+  /** 点列表行 = 切到这位角色并立刻开始播放。 */
+  onPlaySelection: () => void;
   setPlaybackTime?: (time: number) => void;
   setVolume: (volume: number) => void;
   onNextMusic: () => void;
@@ -97,6 +99,7 @@ export default function ListTab(props: ListTabProps) {
                   props.setCharacterTemporaryDisabled(newMap);
                 }
                 props.setCurrentCharacterId(charId);
+                props.onPlaySelection();
               }}
             >
               <Typography

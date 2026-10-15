@@ -36,6 +36,8 @@ export interface PlayerTabProps {
   setVolume: (volume: number) => void;
   onNextMusic: () => void;
   onPreviousMusic: () => void;
+  /** 点当前这张卡 = 立刻开始播放这一首。 */
+  onPlaySelection: () => void;
   onPlay(): void;
   onPause(): void;
 };
@@ -43,7 +45,7 @@ export interface PlayerTabProps {
 export default function PlayerTab({
   data, currentCharacterId, audioRef, duration, playingOrder,
   musicSelection, 
-  onNextMusic, onPreviousMusic, onPlay, onPause,
+  onNextMusic, onPreviousMusic, onPlaySelection, onPlay, onPause,
   characterTemporaryDisabled, setCharacterTemporaryDisabled, setPlayingOrder, setCurrentCharacterId,
   playbackSetting, setPlaybackSetting, setPlaybackTime,
   playbackState,
@@ -208,11 +210,13 @@ export default function PlayerTab({
               return (
                 <Box
                   key={characterId}
+                  onClick={index === currentIndex ? () => { onPlaySelection(); } : undefined}
                   sx={{ 
                     width: "100%",
                     position: "absolute",
                     transform: `translateX(${(index - currentIndex) * 100}%)`,
                     transition: "transform 0.3s ease-in-out",
+                    cursor: index === currentIndex ? "pointer" : "default",
                   }}
                 >
                   <MusicCardDisplay
