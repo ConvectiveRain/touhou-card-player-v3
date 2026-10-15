@@ -6,15 +6,21 @@
  * prefix). Reading them eagerly keeps the value stable for the whole session.
  */
 
+import { JoinCodeParam, JoinRoleParam } from "./joinLink";
+
 export type FeatureFlags = {
   /** `?g` — render cards with a pseudo-random tilt. */
   glitch: boolean;
   /** `?r2` — load card images from the Cloudflare R2 bucket instead of the local copies. */
   useR2: boolean;
-  /** `?locale=en|zh` — explicit locale override. */
+  /** `?locale=en|zh|ja` — explicit locale override. */
   locale: string | null;
   /** `?cheatcode=...` — enables cheat mode when it matches. */
   cheatcode: string | null;
+  /** `?code=...` — share code of a PvP join link. */
+  code: string | null;
+  /** `?role=client|observer` — role to prefill for a PvP join link. */
+  role: string | null;
 };
 
 const NoFeatures: FeatureFlags = {
@@ -22,6 +28,8 @@ const NoFeatures: FeatureFlags = {
   useR2: false,
   locale: null,
   cheatcode: null,
+  code: null,
+  role: null,
 };
 
 export function readFeaturesFromSearch(search: string): FeatureFlags {
@@ -31,6 +39,8 @@ export function readFeaturesFromSearch(search: string): FeatureFlags {
     useR2: params.get("r2") !== null,
     locale: params.get("locale"),
     cheatcode: params.get("cheatcode"),
+    code: params.get(JoinCodeParam),
+    role: params.get(JoinRoleParam),
   };
 }
 

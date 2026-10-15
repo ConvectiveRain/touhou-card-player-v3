@@ -280,6 +280,8 @@ function GameTab(props: GameTabProps) {
           onToggleClientObserver={actions.toggleClientObserver}
           onRegenerateCode={actions.regeneratePeerId}
           onCopyCode={actions.copyPeerId}
+          onCopyClientJoinUrl={actions.copyClientJoinUrl}
+          onCopyObserverJoinUrl={actions.copyObserverJoinUrl}
         />
 
         <PlayerNameOverlay

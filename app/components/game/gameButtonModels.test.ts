@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CardInfo, GameJudge, GameJudgeState, MatchType } from "../../types/GameJudge";
 import { GetLocalizedString, Localization } from "../../types/Localization";
+import type { LocalizedString } from "../../types/Localization";
 import { createTestOuterRef } from "../../test/fixtures";
 import {
   computeNextTurnButton, computeNextTurnInstruction, computeOpponentButton,
@@ -111,7 +112,7 @@ describe("computeStartButton", () => {
 
 describe("computeOpponentButton", () => {
   it("names the current mode and flags the network modes", () => {
-    const cases: Array<[MatchType, { en: string; zh: string }, boolean]> = [
+    const cases: Array<[MatchType, LocalizedString, boolean]> = [
       [MatchType.None, Localization.GameOpponentNoOpponent, false],
       [MatchType.CPU, Localization.GameOpponentCPUOpponent, false],
       [MatchType.Server, Localization.GameOpponentRemoteAsServer, true],

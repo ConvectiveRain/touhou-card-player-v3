@@ -44,12 +44,18 @@ export type GameDataStore = {
 /** Picks the locale from `?locale=`, falling back to the browser language. */
 function applyLocale(): void {
   const features = getFeatures();
-  if (features.locale === "en" || features.locale === "zh") {
+  if (features.locale === "en" || features.locale === "zh" || features.locale === "ja") {
     setLocale(features.locale);
     return;
   }
   const browserLanguage = navigator.language || navigator.languages?.[0] || "en";
-  setLocale(browserLanguage.startsWith("zh") ? "zh" : "en");
+  if (browserLanguage.startsWith("zh")) {
+    setLocale("zh");
+  } else if (browserLanguage.startsWith("ja")) {
+    setLocale("ja");
+  } else {
+    setLocale("en");
+  }
 }
 
 export function useGameData(): GameDataStore {

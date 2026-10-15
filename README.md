@@ -6,7 +6,26 @@ Touhou Cards V3 is a browser-based deck experience that mixes visual flair with 
 - [Glitch effect](https://lightbulb128.github.io/touhou-card-player-v3/?g=1)
 - [Chinese locale](https://lightbulb128.github.io/touhou-card-player-v3/?locale=zh)
 - [English locale](https://lightbulb128.github.io/touhou-card-player-v3/?locale=en)
+- [Japanese locale](https://lightbulb128.github.io/touhou-card-player-v3/?locale=ja)
 - [Use R2 bucket for cards rendering](https://lightbulb128.github.io/touhou-card-player-v3/?r2=1). We use Github Pages images by default.
+
+## What this is
+
+A fan-made Touhou card game that you play by ear, bundled with a music player for the soundtrack it draws on.
+
+- **The game.** Each turn a Touhou track starts playing. Click the card of the character that track
+  belongs to — the first correct pick takes it.
+- **Two ways to win.** *Classic Mode* makes a wrong pick cost you cards and is won by emptying your
+  deck first; *Leisure Mode* ignores wrong picks and is won by holding more cards once the board is
+  cleared.
+- **Opponents.** Play solo as a sandbox, against a CPU rival whose reaction time and mistake rate
+  you set, or against other players — one on one, or a multi-player melee.
+- **The music player.** Queue characters and reorder, shuffle or reset that order, temporarily
+  disable any of them without losing the rest, switch card art or music source, or give one
+  character a custom theme. `[`, `]` and `space` drive playback from the Player and List tabs.
+- **Nothing to install or host.** The deployed site is a static page: the rules run in the browser,
+  matches go peer-to-peer over WebRTC (PeerJS) with one player hosting, and preferences stay in
+  localStorage. Card art and music are credited in the Config tab.
 
 ## Running
 
@@ -44,6 +63,7 @@ app/
     format.ts              clock formatting
     persistence.ts         every localStorage key, with validation
     features.ts            ?g / ?r2 / ?locale / ?cheatcode feature flags, read once
+    joinLink.ts            builds and reads ?code / ?role PvP join links
     playbackActions.ts     transport rules shared by the buttons and the hotkeys
     useGameData.ts         character + music dataset, the user's selection, dataset actions
     useMusicPlayer.ts      audio engine: playback, transport, countdown bell
@@ -123,6 +143,7 @@ Four conventions are worth knowing when making changes:
 - **CPU opponent**: Battle an automated rival to keep skills sharp offline.
 - **Remote opponent (WebRTC via PeerJS)**:
   - One player acts as server, sharing a join code for other players (can be 1 opponent for 1v1 or multiple for a melee mode!) to connect.
+	- The server can also copy a ready-made join link for an opponent or an observer (`?code=...&role=client|observer`); opening it goes straight to the game board with the role and share code prefilled, so the recipient only clicks Connect.
 	- Settings sync automatically on connection and again when the game begins.
 	- Set your display name so friends can find you in the lobby list.
 	- Card handoffs are resilient, ensuring transfers finish even on unstable links.

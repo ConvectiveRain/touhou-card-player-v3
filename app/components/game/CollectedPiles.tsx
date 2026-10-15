@@ -3,7 +3,7 @@
 import { Box, Stack, Typography } from "@mui/material";
 import { CustomColors } from "../../types/Consts";
 import { GetLocalizedString, Localization } from "../../types/Localization";
-import { NoFontFamily } from "../Theme";
+import { MonospaceFontFamily, NoFontFamily } from "../Theme";
 
 /**
  * The collected-card piles: the per-player score badge, the player/opponent name labels
@@ -118,7 +118,7 @@ export function CollectedPiles({ model }: { model: CollectedPilesModel }) {
             display: "flex",
           }}
         >
-          <Typography variant="h3" sx={{ userSelect: "none" }} fontFamily={NoFontFamily}>
+          <Typography variant="h3" sx={{ userSelect: "none" }} fontFamily={MonospaceFontFamily}>
             {badge.score}
           </Typography>
         </Box>

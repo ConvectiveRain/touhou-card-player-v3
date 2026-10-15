@@ -24,12 +24,14 @@ export interface ConnectionPanelProps {
   onToggleClientObserver: () => void;
   onRegenerateCode: () => void;
   onCopyCode: () => void;
+  onCopyClientJoinUrl: () => void;
+  onCopyObserverJoinUrl: () => void;
 }
 
 export function ConnectionPanel({
   layout, shown, myName, onMyNameChange, isServer, sharedCode, joinCode,
   onJoinCodeChange, onConnect, isClient, onToggleClientObserver,
-  onRegenerateCode, onCopyCode,
+  onRegenerateCode, onCopyCode, onCopyClientJoinUrl, onCopyObserverJoinUrl,
 }: ConnectionPanelProps) {
   if (!shown) { return null; }
 
@@ -129,7 +131,12 @@ export function ConnectionPanel({
           </Stack>
         )}
         {isServer && (
-          <Stack direction="row" spacing={1}>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            sx={{ flexWrap: "wrap", justifyContent: "center" }}
+          >
             <Button
               onClick={onRegenerateCode}
               variant="outlined"
@@ -147,6 +154,22 @@ export function ConnectionPanel({
               variant="outlined"
             >
               {GetLocalizedString(Localization.GameConnectionCopyToClipboard)}
+            </Button>
+            <Button
+              onClick={onCopyClientJoinUrl}
+              sx={{ fontFamily: NoFontFamily }}
+              disabled={codeIsGenerating}
+              variant="outlined"
+            >
+              {GetLocalizedString(Localization.GameConnectionCopyClientLink)}
+            </Button>
+            <Button
+              onClick={onCopyObserverJoinUrl}
+              sx={{ fontFamily: NoFontFamily }}
+              disabled={codeIsGenerating}
+              variant="outlined"
+            >
+              {GetLocalizedString(Localization.GameConnectionCopyObserverLink)}
             </Button>
           </Stack>
         )}
