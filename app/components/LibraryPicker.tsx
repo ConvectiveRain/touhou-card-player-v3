@@ -183,6 +183,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   const smallText = { fontFamily: NoFontFamily, fontSize: "0.8em", color: "text.secondary" };
 
   return (
+    <>
     <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
       <Select
         size="small"
@@ -379,6 +380,6 @@ export default function LibraryPicker(props: LibraryPickerProps) {
           )}
         </Box>
       </Drawer>
-    </Stack>
+    </>
   );
 }
