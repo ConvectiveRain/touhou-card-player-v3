@@ -197,7 +197,13 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     const audio = audioRef.current;
     const sourceUrl = currentCharacterId === "" ? null : getMusicSourceUrl(currentCharacterId);
     if (audio && sourceUrl !== null && audio.getAttribute("src") === sourceUrl) {
-      audio.play().catch((error) => { console.log("Playback was blocked:", error); });
+      audio.play().catch((error: unknown) => {
+        // 点卡片时若同时换了曲目，这一次 play() 会被新的加载请求打断（AbortError），属预期；
+        // 新曲目会在 loadeddata 时开始，这里只报真正的失败原因（例如浏览器拦截自动播放）。
+        if ((error as DOMException | null)?.name !== "AbortError") {
+          console.log("Playback was blocked:", error);
+        }
+      });
     }
   }, [currentCharacterId, getMusicSourceUrl]);
 
@@ -353,6 +359,9 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     const audio = audioRef.current;
     if (!audio) { return; }
     const sourceUrl = getMusicSourceUrl(currentCharacterId);
+    // 同一首曲子不要重新加载：load() 会打断正在播的声音，而同一地址不会再补发 loadeddata，
+    // 于是「点一下当前这首让它播」就会变成静默。地址真的换了才交给 <audio> 重新加载。
+    if (sourceUrl === audio.getAttribute("src")) { return; }
     if (sourceUrl) {
       audio.src = sourceUrl;
       audio.load();
