@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Box, Button, Checkbox, Divider, Drawer, MenuItem, Select, Stack, ToggleButton, ToggleButtonGroup,
   Typography,
@@ -104,6 +104,25 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     });
     return index;
   }, [props.data]);
+
+  // musicId -> 社团。曲目 ID 是「社团 - 专辑/曲名.mp3」，但切字符串不可靠（社团名里也有 "-"），
+  // 所以直接用专辑表反查；上游音源（ZUN 原盘等）不在专辑表里，查不到就是"不属于任何勾选社团"。
+  const circleOfMusic = useMemo(() => {
+    const index = new Map<string, string>();
+    (library?.albums ?? []).forEach((album) => {
+      album.music.forEach((musicId) => {
+        if (!index.has(musicId)) { index.set(musicId, album.circle); }
+      });
+    });
+    return index;
+  }, [library]);
+
+  /** 曲目列表的社团筛选：没勾社团（= 全部）一律通过；勾了就只留勾中社团的曲目。 */
+  const inCircles = useCallback((musicId: string): boolean => {
+    if (circles.length === 0) { return true; }
+    const circle = circleOfMusic.get(musicId);
+    return circle !== undefined && circles.includes(circle);
+  }, [circles, circleOfMusic]);
 
   // 曲目索引：直接从角色配置里展开（曲目 ID 里就带着专辑和曲名）
   const allTracks = useMemo(() => {
@@ -236,18 +255,25 @@ export default function LibraryPicker(props: LibraryPickerProps) {
    * 点过专辑、且还没离开这张专辑的锚点角色时，改显示这张专辑的全部曲目。
    * 输入关键词时在全部曲目里搜。
    */
-  const albumBrowse = browsedAlbum && browsedAlbum.anchor === props.currentCharacterId
+  // 换社团筛选后，正在看的那张专辑如果已经不在勾选范围内，就退回「跟当前角色走」，
+  // 否则这片列表会空空如也、行高亮也还挂着。
+  const albumBrowse = browsedAlbum
+    && browsedAlbum.anchor === props.currentCharacterId
+    && (circles.length === 0 || circles.includes(browsedAlbum.album.circle))
     ? browsedAlbum
     : null;
 
   const shownTracks = useMemo(() => {
     const query = trackQuery.trim().toLowerCase();
     if (query) {
-      return allTracks.filter((track) => track.haystack.includes(query)).slice(0, 300);
+      return allTracks
+        .filter((track) => track.haystack.includes(query) && inCircles(track.musicId))
+        .slice(0, 300);
     }
     if (albumBrowse) {
       const list = [];
       for (const musicId of albumBrowse.album.music) {
+        if (!inCircles(musicId)) { continue; }
         const characterId = characterOfMusic.get(musicId);
         if (!characterId) { continue; }
         const config = props.data.characterConfigs.get(characterId);
@@ -262,15 +288,18 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       }
       return list.slice(0, 300);
     }
-    return allTracks.filter((track) => track.characterId === props.currentCharacterId).slice(0, 300);
-  }, [allTracks, trackQuery, albumBrowse, characterOfMusic, props.data, props.currentCharacterId]);
+    return allTracks
+      .filter((track) => track.characterId === props.currentCharacterId && inCircles(track.musicId))
+      .slice(0, 300);
+  }, [allTracks, trackQuery, albumBrowse, characterOfMusic, props.data, props.currentCharacterId, inCircles]);
 
   // 列表上面那行小字：现在看的是谁 / 哪张专辑
+  const circleHint = circles.length === 0 ? "" : "，仅勾选的社团";
   const listCaption = trackQuery
-    ? `${shownTracks.length} 首（最多列 300）`
+    ? `${shownTracks.length} 首（最多列 300）${circleHint}`
     : albumBrowse
-      ? `专辑：${albumBrowse.album.name}（${shownTracks.length} 首）`
-      : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首）`;
+      ? `专辑：${albumBrowse.album.name}（${shownTracks.length} 首${circleHint}）`
+      : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首${circleHint}）`;
 
   if (!library) { return null; }
 
