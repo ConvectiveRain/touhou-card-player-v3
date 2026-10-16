@@ -117,11 +117,16 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     return index;
   }, [library]);
 
-  /** 曲目列表的社团筛选：没勾社团（= 全部）一律通过；勾了就只留勾中社团的曲目。 */
+  /**
+   * 曲目列表的社团筛选：没勾社团（= 全部）一律通过；勾了社团就只留勾中社团的曲目。
+   *
+   * 专辑表里查不到社团的（ZUN 原盘、上游 163 那批「非社团音源」）**始终保留**——
+   * 用户要的是「挡掉别的同人社团」，不是把原曲也挡掉。
+   */
   const inCircles = useCallback((musicId: string): boolean => {
     if (circles.length === 0) { return true; }
     const circle = circleOfMusic.get(musicId);
-    return circle !== undefined && circles.includes(circle);
+    return circle === undefined || circles.includes(circle);
   }, [circles, circleOfMusic]);
 
   // 曲目索引：直接从角色配置里展开（曲目 ID 里就带着专辑和曲名）
@@ -294,7 +299,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   }, [allTracks, trackQuery, albumBrowse, characterOfMusic, props.data, props.currentCharacterId, inCircles]);
 
   // 列表上面那行小字：现在看的是谁 / 哪张专辑
-  const circleHint = circles.length === 0 ? "" : "，仅勾选的社团";
+  const circleHint = circles.length === 0 ? "" : "，已按社团筛选";
   const listCaption = trackQuery
     ? `${shownTracks.length} 首（最多列 300）${circleHint}`
     : albumBrowse
