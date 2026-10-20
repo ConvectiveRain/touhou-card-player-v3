@@ -4,7 +4,7 @@ import { Box, Button, Stack, TextField, Typography } from "@mui/material";
 import { 
   CharacterId, createPlayingOrder, 
   GlobalData, 
-  MusicSelectionMap, PlaybackSetting,
+  MusicInfo, MusicSelectionMap, PlaybackSetting,
   PlaybackState
 } from "../types/Configs";
 import { musicInfoFor } from "../lib/music";
@@ -38,6 +38,7 @@ export interface PlayerTabProps {
   onPreviousMusic: () => void;
   /** 点当前这张卡 = 立刻开始播放这一首。 */
   onPlaySelection: () => void;
+  currentMusicInfo?: MusicInfo | null;
   onPlay(): void;
   onPause(): void;
 };
@@ -45,7 +46,7 @@ export interface PlayerTabProps {
 export default function PlayerTab({
   data, currentCharacterId, audioRef, duration, playingOrder,
   musicSelection, 
-  onNextMusic, onPreviousMusic, onPlaySelection, onPlay, onPause,
+  onNextMusic, onPreviousMusic, onPlaySelection, onPlay, onPause, currentMusicInfo,
   characterTemporaryDisabled, setCharacterTemporaryDisabled, setPlayingOrder, setCurrentCharacterId,
   playbackSetting, setPlaybackSetting, setPlaybackTime,
   playbackState,
@@ -200,6 +201,9 @@ export default function PlayerTab({
               const characterData = data.characterConfigs.get(characterId);
               const cardSources = characterData?.card || [];
               let musicInfo = musicInfoFor(data, musicSelection, characterId);
+              if (characterId === currentCharacterId && currentMusicInfo) {
+                musicInfo = currentMusicInfo;
+              }
               if (!musicInfo) {
                 musicInfo = {
                   characterId: characterId,

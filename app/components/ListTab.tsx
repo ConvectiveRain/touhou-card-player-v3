@@ -1,7 +1,7 @@
 import { RefObject } from "react";
 import { Box, Stack, Typography } from "@mui/material";
 import {
-  GlobalData, MusicSelectionMap, PlaybackState
+  GlobalData, MusicInfo, MusicSelectionMap, PlaybackState
 } from "../types/Configs";
 import { musicInfoFor } from "../lib/music";
 import {theme} from "./Theme";
@@ -22,6 +22,7 @@ export interface ListTabProps {
   setCharacterTemporaryDisabled: (map: Map<string, boolean>) => void;
   /** 点列表行 = 切到这位角色并立刻开始播放。 */
   onPlaySelection: () => void;
+  currentMusicInfo?: MusicInfo | null;
   setPlaybackTime?: (time: number) => void;
   setVolume: (volume: number) => void;
   onNextMusic: () => void;
@@ -31,7 +32,7 @@ export interface ListTabProps {
 }
 
 export default function ListTab(props: ListTabProps) {
-  const currentMusicInfo = musicInfoFor(
+  const currentMusicInfo = props.currentMusicInfo ?? musicInfoFor(
     props.data, props.musicSelection, props.currentCharacterId
   );
   const typographySx = {

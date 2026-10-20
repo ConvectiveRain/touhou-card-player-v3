@@ -25,6 +25,7 @@ type LibraryAlbum = {
   id: string;
   name: string;
   circle: string;
+  producers?: string[];
   date: string;
   cover?: boolean;
   music: string[];
@@ -57,6 +58,10 @@ export interface LibraryPickerProps {
   setCurrentCharacterId: (id: string) => void;
   /** 点角色卡 / 专辑 / 曲目之后让播放器直接开始放这一首。 */
   onPlaySelection: () => void;
+  /** 点专辑里的曲目：切换到这张专辑的播放队列。 */
+  onPlayMusicQueue: (musicIds: Array<string>, musicId: string) => void;
+  /** 当前真正加载的曲目，用于跨角色/专辑队列高亮。 */
+  activeMusicId: string | null;
   disabled?: boolean;
 }
 
@@ -222,8 +227,11 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   const pickAlbum = (album: LibraryAlbum) => {
     const selection = new Map(props.musicSelection);
     const order = [...props.playingOrder];
+    const albumMusicIds = props.scope === "single"
+      ? (albumTracks.get(album.id) ?? [])
+      : album.music;
     let first: string | null = null;
-    album.music.forEach((musicId) => {
+    albumMusicIds.forEach((musicId) => {
       const characterId = characterOfMusic.get(musicId);
       if (!characterId) { return; }
       const config = props.data.characterConfigs.get(characterId);
@@ -236,6 +244,14 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     });
     props.setMusicSelection(selection);
     props.setPlayingOrder(order);
+    if (first === null) {
+      const firstMusicId = albumMusicIds.find((musicId) => props.data.sources.has(musicId));
+      if (firstMusicId) {
+        setBrowsedAlbum({ album, anchor: props.currentCharacterId });
+        props.onPlayMusicQueue(albumMusicIds, firstMusicId);
+      }
+      return;
+    }
     if (first !== null) { props.setCurrentCharacterId(first); }
     setBrowsedAlbum({ album, anchor: first ?? "" });
     props.onPlaySelection();
@@ -277,13 +293,14 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     }
     if (albumBrowse) {
       const list = [];
-      for (const musicId of albumBrowse.album.music) {
+      const albumMusicIds = props.scope === "single"
+        ? (albumTracks.get(albumBrowse.album.id) ?? [])
+        : albumBrowse.album.music;
+      for (const musicId of albumMusicIds) {
         if (!inCircles(musicId)) { continue; }
         const characterId = characterOfMusic.get(musicId);
-        if (!characterId) { continue; }
-        const config = props.data.characterConfigs.get(characterId);
+        const config = characterId ? props.data.characterConfigs.get(characterId) : undefined;
         const index = config ? config.musics.indexOf(musicId) : -1;
-        if (!config || index < 0) { continue; }
         const info = parseMusicInfo(musicId);
         list.push({
           characterId, index, musicId,
@@ -296,7 +313,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     return allTracks
       .filter((track) => track.characterId === props.currentCharacterId && inCircles(track.musicId))
       .slice(0, 300);
-  }, [allTracks, trackQuery, albumBrowse, characterOfMusic, props.data, props.currentCharacterId, inCircles]);
+  }, [allTracks, trackQuery, albumBrowse, albumTracks, characterOfMusic, props.data, props.currentCharacterId, props.scope, inCircles]);
 
   // 列表上面那行小字：现在看的是谁 / 哪张专辑
   const circleHint = circles.length === 0 ? "" : "，已按社团筛选";
@@ -461,11 +478,21 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                 </Typography>
               )}
               {shownTracks.map((track) => {
-                const active = props.musicSelection.get(track.characterId) === track.index;
+                const active = props.activeMusicId === track.musicId;
                 return (
                   <Box
                     key={`${track.characterId}-${track.musicId}`}
-                    onClick={() => { if (!props.disabled) { playTrack(track.characterId, track.index); } }}
+                    onClick={() => {
+                      if (props.disabled) { return; }
+                      if (albumBrowse) {
+                        const albumMusicIds = props.scope === "single"
+                          ? (albumTracks.get(albumBrowse.album.id) ?? [])
+                          : albumBrowse.album.music;
+                        props.onPlayMusicQueue(albumMusicIds, track.musicId);
+                      } else if (track.characterId && track.index >= 0) {
+                        playTrack(track.characterId, track.index);
+                      }
+                    }}
                     sx={{
                       display: "flex", alignItems: "center", gap: 1, padding: "3px 6px",
                       cursor: props.disabled ? "default" : "pointer", borderRadius: 1,
@@ -485,7 +512,17 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                     }}>
                       {track.album}
                     </Typography>
-                    <Typography sx={{ ...smallText, fontSize: "0.72em" }}>{track.characterId}</Typography>
+                    {!albumBrowse && track.characterId && (
+                      <Typography
+                        title={track.characterId}
+                        sx={{
+                          ...smallText, fontSize: "0.72em", maxWidth: "5.5em",
+                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        }}
+                      >
+                        {track.characterId}
+                      </Typography>
+                    )}
                   </Box>
                 );
               })}
@@ -560,7 +597,9 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                   <Typography sx={{
                     fontFamily: NoFontFamily, fontSize: "0.85em", flex: 1,
                     whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                  }}>
+                  }} title={album.producers?.length
+                    ? `${album.name}（制作：${album.producers.join("、")}）`
+                    : album.name}>
                     {album.name}
                   </Typography>
                   <Typography sx={{ ...smallText, fontSize: "0.72em" }}>{album.circle}</Typography>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createTestGlobalData } from "../test/fixtures";
-import { musicIdFor, musicInfoFor, musicSourceFor, parseMusicInfo } from "./music";
+import {
+  musicIdFor, musicInfoFor, musicSourceFor, parseMusicInfo, stepMusicQueueIndex,
+} from "./music";
 import { MusicSelectionMap } from "../types/Configs";
 
 function setup() {
@@ -24,6 +26,19 @@ describe("parseMusicInfo", () => {
 
   it("tolerates an id without an album path", () => {
     expect(parseMusicInfo("Title.mp3")).toEqual({ album: "", title: "Title" });
+  });
+});
+
+describe("stepMusicQueueIndex", () => {
+  it("wraps in both directions", () => {
+    expect(stepMusicQueueIndex(0, 3, -1)).toBe(2);
+    expect(stepMusicQueueIndex(2, 3, 1)).toBe(0);
+    expect(stepMusicQueueIndex(1, 3, 1)).toBe(2);
+  });
+
+  it("returns zero for an empty or invalid queue", () => {
+    expect(stepMusicQueueIndex(0, 0, 1)).toBe(0);
+    expect(stepMusicQueueIndex(1.5, 3, 1)).toBe(0);
   });
 });
 

@@ -207,6 +207,8 @@ export default function Home() {
               setPlayingOrder={setPlayingOrder}
               setCurrentCharacterId={setCurrentCharacterId}
               onPlaySelection={player.playSelection}
+              onPlayMusicQueue={player.playMusicQueue}
+              activeMusicId={player.activeMusicId}
               disabled={player.inGame}
             />
             <Divider orientation="vertical" flexItem />
@@ -281,6 +283,7 @@ export default function Home() {
                 setPlayingOrder={setPlayingOrder}
                 setCurrentCharacterId={setCurrentCharacterId}
                 onPlaySelection={player.playSelection}
+                currentMusicInfo={player.currentMusicInfo}
                 setPlaybackSetting={player.setPlaybackSetting}
                 setPlaybackTime={player.setPlaybackTime}
                 setVolume={player.setVolume}
@@ -304,6 +307,7 @@ export default function Home() {
                 playbackState={player.playbackState}
                 volume={player.volume}
                 onPlaySelection={player.playSelection}
+                currentMusicInfo={player.currentMusicInfo}
                 setPlaybackTime={player.setPlaybackTime}
                 setVolume={player.setVolume}
                 onNextMusic={player.next}

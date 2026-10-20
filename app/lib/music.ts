@@ -67,6 +67,12 @@ export function parseMusicInfo(musicName: string): { title: string; album: strin
   return { title, album };
 }
 
+/** Wraps an album-queue cursor for the previous/next controls. */
+export function stepMusicQueueIndex(index: number, length: number, direction: 1 | -1): number {
+  if (!Number.isInteger(index) || length <= 0) { return 0; }
+  return (index + direction + length) % length;
+}
+
 const MusicAuthors = [
   "黄昏フロンティア・上海アリス幻樂団",
   "上海アリス幻樂団",

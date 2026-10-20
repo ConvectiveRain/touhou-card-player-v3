@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CharacterId, createPlayingOrder, GlobalData, MusicSelectionMap,
-  PlaybackSetting, PlaybackState,
+  MusicInfo, MusicUniqueId, PlaybackSetting, PlaybackState,
 } from "../types/Configs";
-import { musicSourceFor } from "./music";
+import { musicIdFor, musicSourceFor, parseMusicInfo, stepMusicQueueIndex } from "./music";
 import { loadVolume, saveVolume } from "./persistence";
 
 /**
@@ -58,6 +58,11 @@ export type MusicPlayerStore = {
   pause: () => void;
   /** 点卡片 / 列表行：换到这一首并立刻开始播放（不改变曲目选择本身）。 */
   playSelection: () => void;
+  /** 播放一张专辑中的某一首；上一首 / 下一首沿这张专辑走。 */
+  playMusicQueue: (musicIds: Array<MusicUniqueId>, musicId: MusicUniqueId) => void;
+  /** 当前真正加载的曲目（可能来自角色队列，也可能来自专辑队列）。 */
+  activeMusicId: MusicUniqueId | null;
+  currentMusicInfo: MusicInfo | null;
   previous: () => void;
   next: () => void;
   setPlaybackTime: (time: number) => void;
@@ -91,6 +96,10 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   const [volume, setVolumeState] = useState<number>(() => loadVolume());
   const [musicStartTimestamp, setMusicStartTimestamp] = useState<number>(0);
   const [inGame, setInGame] = useState<boolean>(false);
+  const [directQueue, setDirectQueue] = useState<{
+    musicIds: Array<MusicUniqueId>;
+    index: number;
+  } | null>(null);
   // True while something (the About tab) asked for the countdown to stay off temporarily.
   const countdownSuspendedRef = useRef<boolean>(false);
 
@@ -120,8 +129,12 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   // region music lookup
 
   const getMusicSourceUrl = useCallback((character: CharacterId): string | null => {
+    if (directQueue) {
+      const musicId = directQueue.musicIds[directQueue.index];
+      return musicId ? globalData.sources.get(musicId) || null : null;
+    }
     return musicSourceFor(globalData, musicSelection, character);
-  }, [globalData, musicSelection]);
+  }, [directQueue, globalData, musicSelection]);
 
   // region transport
 
@@ -193,9 +206,12 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
    * 正好用来判断"要不要等新曲目加载"。
    */
   const playSelection = useCallback(() => {
+    setDirectQueue(null);
     setPlaybackState(PlaybackState.Playing);
     const audio = audioRef.current;
-    const sourceUrl = currentCharacterId === "" ? null : getMusicSourceUrl(currentCharacterId);
+    const sourceUrl = currentCharacterId === ""
+      ? null
+      : musicSourceFor(globalData, musicSelection, currentCharacterId);
     if (audio && sourceUrl !== null && audio.getAttribute("src") === sourceUrl) {
       audio.play().catch((error: unknown) => {
         // 点卡片时若同时换了曲目，这一次 play() 会被新的加载请求打断（AbortError），属预期；
@@ -205,7 +221,24 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
         }
       });
     }
-  }, [currentCharacterId, getMusicSourceUrl]);
+  }, [currentCharacterId, globalData, musicSelection]);
+
+  const playMusicQueue = useCallback((musicIds: Array<MusicUniqueId>, musicId: MusicUniqueId) => {
+    const playable = musicIds.filter((id) => globalData.sources.has(id));
+    const index = playable.indexOf(musicId);
+    if (index < 0) { return; }
+    setDirectQueue({ musicIds: playable, index });
+    setPlaybackState(PlaybackState.Playing);
+    const audio = audioRef.current;
+    const sourceUrl = globalData.sources.get(musicId);
+    if (audio && sourceUrl && audio.getAttribute("src") === sourceUrl) {
+      audio.play().catch((error: unknown) => {
+        if ((error as DOMException | null)?.name !== "AbortError") {
+          console.log("Playback was blocked:", error);
+        }
+      });
+    }
+  }, [globalData]);
 
   /** Pauses without marking the track stopped, so a later play resumes where it left off. */
   const pauseForGame = useCallback(() => {
@@ -226,6 +259,16 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   }, []);
 
   const stepCharacter = useCallback((direction: 1 | -1) => {
+    if (directQueue) {
+      const nextIndex = stepMusicQueueIndex(
+        directQueue.index, directQueue.musicIds.length, direction,
+      );
+      setDirectQueue({ ...directQueue, index: nextIndex });
+      if (stateRef.current.playbackSetting.pauseOnSwitch) {
+        pause();
+      }
+      return;
+    }
     const total = playingOrder.length;
     if (total === 0) { return; }
     const currentIndex = playingOrder.indexOf(currentCharacterId);
@@ -244,7 +287,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
       }
     }
   }, [
-    playingOrder, currentCharacterId, musicSelection, characterTemporaryDisabled,
+    directQueue, playingOrder, currentCharacterId, musicSelection, characterTemporaryDisabled,
     setCurrentCharacterId, pause,
   ]);
 
@@ -306,6 +349,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   // region game integration
 
   const startGame = useCallback((order: Array<CharacterId> | null): Array<CharacterId> => {
+    setDirectQueue(null);
     const newTemporaryDisabled = new Map<CharacterId, boolean>();
     const newOrder = order ?? createPlayingOrder(
       globalData, musicSelection, newTemporaryDisabled, true,
@@ -321,6 +365,13 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     globalData, musicSelection, setCharacterTemporaryDisabled, setPlayingOrder,
     setCurrentCharacterId,
   ]);
+
+  const activeMusicId = directQueue
+    ? directQueue.musicIds[directQueue.index] ?? null
+    : (currentCharacterId ? musicIdFor(globalData, musicSelection, currentCharacterId) : null);
+  const currentMusicInfo: MusicInfo | null = activeMusicId
+    ? { characterId: currentCharacterId, ...parseMusicInfo(activeMusicId) }
+    : null;
 
   const endGame = useCallback(() => {
     setInGame(false);
@@ -355,7 +406,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   }, [volume]);
 
   useEffect(() => {
-    if (!ready || currentCharacterId === "") { return; }
+    if (!ready || (currentCharacterId === "" && !directQueue)) { return; }
     const audio = audioRef.current;
     if (!audio) { return; }
     const sourceUrl = getMusicSourceUrl(currentCharacterId);
@@ -368,7 +419,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     } else {
       audio.src = "";
     }
-  }, [ready, currentCharacterId, getMusicSourceUrl]);
+  }, [ready, currentCharacterId, directQueue, getMusicSourceUrl]);
 
   return {
     audioRef,
@@ -393,6 +444,9 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     play,
     pause,
     playSelection,
+    playMusicQueue,
+    activeMusicId,
+    currentMusicInfo,
     previous,
     next,
     setPlaybackTime,
