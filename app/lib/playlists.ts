@@ -24,6 +24,7 @@ export type PlaylistStoreFile = {
 };
 
 export const PlaylistStorageKey = "card-player-playlists-v1";
+export const DefaultPlaylistName = "默认歌单";
 
 function makeId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -132,6 +133,37 @@ export function addUniqueTracks(
     result.push(track);
   }
   return result;
+}
+
+export function addTrackToPlaylist(
+  playlists: Array<MusicPlaylist>,
+  playlistId: string,
+  track: PlaylistTrack,
+): { playlists: Array<MusicPlaylist>; added: number } {
+  const target = playlists.find((playlist) => playlist.id === playlistId);
+  if (!target) { return { playlists, added: 0 }; }
+  const tracks = addUniqueTracks(target.tracks, [track]);
+  const added = tracks.length - target.tracks.length;
+  if (added === 0) { return { playlists, added: 0 }; }
+  return {
+    playlists: playlists.map((playlist) => (
+      playlist.id === target.id
+        ? { ...playlist, tracks, updatedAt: new Date().toISOString() }
+        : playlist
+    )),
+    added,
+  };
+}
+
+export function addTrackToDefaultPlaylist(
+  playlists: Array<MusicPlaylist>,
+  track: PlaylistTrack,
+): { playlists: Array<MusicPlaylist>; playlistId: string; added: number } {
+  const existing = playlists.find((playlist) => playlist.name === DefaultPlaylistName);
+  const target = existing ?? createPlaylist(DefaultPlaylistName);
+  const nextPlaylists = existing ? playlists : [...playlists, target];
+  const result = addTrackToPlaylist(nextPlaylists, target.id, track);
+  return { ...result, playlistId: target.id };
 }
 
 /**

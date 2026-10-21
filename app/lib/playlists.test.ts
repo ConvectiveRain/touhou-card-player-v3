@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { GlobalData } from "../types/Configs";
 import {
-  addUniqueTracks, buildPlaylistGameSelection, createPlaylist, normalizePlaylistStore,
+  addTrackToDefaultPlaylist, addTrackToPlaylist, addUniqueTracks,
+  buildPlaylistGameSelection, createPlaylist, DefaultPlaylistName, normalizePlaylistStore,
 } from "./playlists";
 
 function dataWithTracks(): GlobalData {
@@ -55,5 +56,36 @@ describe("playlist persistence helpers", () => {
     expect(game.order).toEqual(["alice", "marisa"]);
     expect(game.selection.get("alice")).toBe(1);
     expect(game.selection.get("marisa")).toBe(0);
+  });
+
+  it("creates and reuses the default playlist while deduplicating tracks", () => {
+    const track = {
+      musicId: "album/A - one.mp3", characterId: "alice",
+      title: "one", album: "album", addedAt: "2026-10-22T00:00:00.000Z",
+    };
+    const first = addTrackToDefaultPlaylist([], track);
+    expect(first.playlists).toHaveLength(1);
+    expect(first.playlists[0].name).toBe(DefaultPlaylistName);
+    expect(first.playlists[0].tracks).toHaveLength(1);
+    expect(first.added).toBe(1);
+
+    const second = addTrackToDefaultPlaylist(first.playlists, { ...track, title: "updated" });
+    expect(second.playlists).toHaveLength(1);
+    expect(second.playlists[0].tracks).toHaveLength(1);
+    expect(second.added).toBe(0);
+  });
+
+  it("adds a track to an explicitly selected playlist", () => {
+    const target = createPlaylist("目标歌单");
+    const other = createPlaylist("其他歌单");
+    const track = {
+      musicId: "album/M - one.mp3", characterId: "marisa",
+      title: "one", album: "album", addedAt: "2026-10-22T00:00:00.000Z",
+    };
+    const result = addTrackToPlaylist([target, other], target.id, track);
+
+    expect(result.added).toBe(1);
+    expect(result.playlists[0].tracks).toHaveLength(1);
+    expect(result.playlists[1].tracks).toHaveLength(0);
   });
 });

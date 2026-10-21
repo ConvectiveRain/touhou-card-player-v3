@@ -92,6 +92,24 @@ async function screenshot(path) {
   fs.writeFileSync(path, Buffer.from(shot.data, "base64"));
 }
 
+async function openPlaylistManager() {
+  const end = Date.now() + 30000;
+  while (Date.now() < end) {
+    const ready = await evaluate(`[...document.querySelectorAll("input")].some(
+      (item) => item.placeholder === "新歌单名称",
+    )`);
+    if (ready) { return; }
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (item) => item.textContent?.trim() === "我的歌单",
+      );
+      button?.click();
+    })()`);
+    await sleep(250);
+  }
+  throw new Error("playlist manager did not open");
+}
+
 await send("Runtime.enable");
 await send("Page.enable");
 await send("Network.enable");
@@ -109,11 +127,7 @@ await send("Page.reload", { ignoreCache: true });
 await waitFor(`document.readyState === "complete" && document.body.innerText.includes("我的歌单")`);
 
 const playlistName = `网站歌单 ${Date.now()}`;
-await evaluate(`(() => {
-  const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "我的歌单");
-  button.click();
-})()`);
-await waitFor(`[...document.querySelectorAll("input")].some((item) => item.placeholder === "新歌单名称")`);
+await openPlaylistManager();
 await evaluate(`(() => {
   const input = [...document.querySelectorAll("input")].find((item) => item.placeholder === "新歌单名称");
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
@@ -142,6 +156,89 @@ await waitFor(`document.body.innerText.includes("已加入 2 首")`);
 const storedAfterAdd = await evaluate(`JSON.parse(localStorage.getItem("card-player-playlists-v1"))`);
 if (storedAfterAdd.playlists.length !== 1 || storedAfterAdd.playlists[0].tracks.length !== 2) {
   throw new Error(`playlist was not saved: ${JSON.stringify(storedAfterAdd)}`);
+}
+
+const quickTitles = await evaluate(`(() => {
+  const rows = [...document.querySelectorAll('[data-testid="playlist-source-track"]')];
+  if (rows.length < 4) { throw new Error("not enough source rows for quick-add E2E"); }
+  const defaultRow = rows[2];
+  const pickerRow = rows[3];
+  const defaultTitle = defaultRow.querySelector("p")?.textContent ?? "";
+  const pickerTitle = pickerRow.querySelector("p")?.textContent ?? "";
+  defaultRow.querySelector('button[aria-label="加入默认歌单"]').click();
+  return { defaultTitle, pickerTitle };
+})()`);
+await waitFor(`(() => {
+  const store = JSON.parse(localStorage.getItem("card-player-playlists-v1"));
+  const playlist = store.playlists.find((item) => item.name === "默认歌单");
+  return !!playlist && playlist.tracks.length === 1;
+})()`);
+
+const defaultQuickState = await evaluate(`(() => {
+  const store = JSON.parse(localStorage.getItem("card-player-playlists-v1"));
+  return {
+    playlists: store.playlists.length,
+    defaultTracks: store.playlists.find((item) => item.name === "默认歌单")?.tracks.length,
+    selectionButton: [...document.querySelectorAll("button")].find(
+      (item) => item.textContent?.includes("加入所选"),
+    )?.textContent,
+  };
+})()`);
+if (defaultQuickState.playlists !== 2 || defaultQuickState.defaultTracks !== 1) {
+  throw new Error(`default quick add did not create the playlist: ${JSON.stringify(defaultQuickState)}`);
+}
+if (!defaultQuickState.selectionButton?.includes("（0）")) {
+  throw new Error(`default quick add leaked into checkbox selection: ${JSON.stringify(defaultQuickState)}`);
+}
+
+await evaluate(`(() => {
+  const rows = [...document.querySelectorAll('[data-testid="playlist-source-track"]')];
+  rows[3].querySelector('button[aria-label="选择歌单"]').click();
+})()`);
+await waitFor(`(() => {
+  const title = document.querySelector('[data-testid="playlist-picker-title"]');
+  return !!title && title.innerText.includes(${JSON.stringify(quickTitles.pickerTitle)})
+    && !!document.querySelector('[data-testid="playlist-picker-content"]');
+})()`);
+await evaluate(`(() => {
+  const dialog = document.querySelector('[data-testid="playlist-picker-content"]');
+  const option = [...dialog.querySelectorAll('input[type="radio"]')].find(
+    (item) => item.closest("label")?.textContent?.includes(${JSON.stringify(playlistName)}),
+  );
+  if (!option) {
+    throw new Error("target playlist option missing: " + dialog.innerText);
+  }
+  option.click();
+  const button = document.querySelector('[data-testid="playlist-picker-add"]');
+  if (!button) { throw new Error("playlist picker add button missing"); }
+  button.click();
+})()`);
+await waitFor(`(() => {
+  const store = JSON.parse(localStorage.getItem("card-player-playlists-v1"));
+  const playlist = store.playlists.find((item) => item.name === ${JSON.stringify(playlistName)});
+  return !!playlist && playlist.tracks.length === 3
+    && !document.querySelector('[data-testid="playlist-picker-content"]');
+})()`);
+
+const quickActionState = await evaluate(`(() => {
+  const playlistRows = [...document.querySelectorAll('[data-testid="playlist-track"]')];
+  const sourceRows = [...document.querySelectorAll('[data-testid="playlist-source-track"]')];
+  return {
+    playlistRows: playlistRows.length,
+    playlistRowsWithTwoButtons: playlistRows.filter(
+      (row) => row.querySelectorAll('button[aria-label="加入默认歌单"], button[aria-label="选择歌单"]').length === 2,
+    ).length,
+    sourceRows: sourceRows.length,
+    sourceRowsWithTwoButtons: sourceRows.filter(
+      (row) => row.querySelectorAll('button[aria-label="加入默认歌单"], button[aria-label="选择歌单"]').length === 2,
+    ).length,
+  };
+})()`);
+if (quickActionState.playlistRows !== 3
+  || quickActionState.playlistRowsWithTwoButtons !== quickActionState.playlistRows
+  || quickActionState.sourceRows === 0
+  || quickActionState.sourceRowsWithTwoButtons !== quickActionState.sourceRows) {
+  throw new Error(`quick playlist buttons are missing from track rows: ${JSON.stringify(quickActionState)}`);
 }
 await screenshot(managerScreenshot);
 
