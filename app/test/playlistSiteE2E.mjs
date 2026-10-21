@@ -245,4 +245,3 @@ console.log(JSON.stringify({
   gameScreenshot,
 }));
 socket.close();
-
