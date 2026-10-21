@@ -2,22 +2,18 @@
 
 import { useMemo, useRef, useState } from "react";
 import {
-  Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
-  Divider, Drawer, FormControlLabel, IconButton, Radio, RadioGroup, Stack, TextField,
-  Typography,
+  Alert, Box, Button, Checkbox, Divider, Drawer, Stack, TextField, Typography,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import CreateNewFolderIcon from "@mui/icons-material/CreateNewFolder";
-import { GlobalData, MusicUniqueId } from "../types/Configs";
+import { GlobalData } from "../types/Configs";
 import { parseMusicInfo } from "../lib/music";
 import {
-  addTrackToDefaultPlaylist, addTrackToPlaylist, addUniqueTracks, createPlaylist,
-  DefaultPlaylistName, MusicPlaylist, normalizePlaylistStore, PlaylistTrack,
+  addUniqueTracks, createPlaylist, MusicPlaylist, normalizePlaylistStore, PlaylistTrack,
 } from "../lib/playlists";
 import { NoFontFamily, theme } from "./Theme";
+import PlaylistTrackActions from "./PlaylistTrackActions";
 
 type IndexedTrack = {
-  musicId: MusicUniqueId;
+  musicId: string;
   characterId: string;
   index: number;
   title: string;
@@ -31,8 +27,10 @@ export interface PlaylistManagerProps {
   data: GlobalData;
   disabled?: boolean;
   playlists: Array<MusicPlaylist>;
+  activePlaylistId: string;
   onPlaylistsChange: (playlists: Array<MusicPlaylist>) => void;
-  onPlayMusicQueue: (musicIds: Array<MusicUniqueId>, musicId: MusicUniqueId) => void;
+  onSelectPlaylist: (playlistId: string) => void;
+  onPlayPlaylist: (playlistId: string) => void;
 }
 
 function nowIso(): string {
@@ -55,14 +53,16 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const [status, setStatus] = useState("");
-  const [pickerTrack, setPickerTrack] = useState<PlaylistTrack | null>(null);
-  const [pickerPlaylistId, setPickerPlaylistId] = useState("");
-  const [pickerNewName, setPickerNewName] = useState("");
   const importRef = useRef<HTMLInputElement | null>(null);
 
-  const selectedPlaylistId = props.playlists.some(
-    (playlist) => playlist.id === requestedPlaylistId,
-  ) ? requestedPlaylistId : (props.playlists[0]?.id ?? "");
+  const activePlaylistId = props.playlists.some(
+    (playlist) => playlist.id === props.activePlaylistId,
+  ) ? props.activePlaylistId : "";
+  const selectedPlaylistId = activePlaylistId || (
+    props.playlists.some((playlist) => playlist.id === requestedPlaylistId)
+      ? requestedPlaylistId
+      : (props.playlists[0]?.id ?? "")
+  );
   const selectedPlaylist = props.playlists.find(
     (playlist) => playlist.id === selectedPlaylistId,
   ) ?? null;
@@ -109,6 +109,7 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
     const playlist = createPlaylist(name);
     commit([...props.playlists, playlist]);
     setRequestedPlaylistId(playlist.id);
+    props.onSelectPlaylist(playlist.id);
     setNewName("");
     setStatus(`已新建《${playlist.name}》。`);
   };
@@ -128,64 +129,12 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
     setStatus(added > 0 ? `已加入 ${added} 首。` : "这些曲目已经在歌单中。");
   };
 
-  const addToDefaultPlaylist = (track: PlaylistTrack) => {
-    const result = addTrackToDefaultPlaylist(props.playlists, track);
-    commit(result.playlists);
-    setStatus(result.added > 0
-      ? `已把《${track.title}》加入《${DefaultPlaylistName}》。`
-      : `《${track.title}》已经在《${DefaultPlaylistName}》中。`);
-  };
-
-  const openPlaylistPicker = (track: PlaylistTrack) => {
-    setPickerTrack(track);
-    setPickerPlaylistId(selectedPlaylistId || props.playlists[0]?.id || "");
-    setPickerNewName("");
-  };
-
-  const closePlaylistPicker = () => {
-    setPickerTrack(null);
-    setPickerNewName("");
-  };
-
-  const addToPickedPlaylist = () => {
-    if (!pickerTrack) { return; }
-    const newPlaylistName = pickerNewName.trim();
-    let nextPlaylists = props.playlists;
-    let targetId = pickerPlaylistId;
-    if (newPlaylistName) {
-      const playlist = createPlaylist(newPlaylistName);
-      nextPlaylists = [...nextPlaylists, playlist];
-      targetId = playlist.id;
-    }
-    if (!targetId) {
-      setStatus("请选择歌单，或输入新歌单名称。");
-      return;
-    }
-    const result = addTrackToPlaylist(nextPlaylists, targetId, pickerTrack);
-    if (result.playlists === nextPlaylists && result.added === 0
-      && !nextPlaylists.some((playlist) => playlist.id === targetId)) {
-      setStatus("目标歌单已经不存在，请重新选择。");
-      return;
-    }
-    const target = nextPlaylists.find((playlist) => playlist.id === targetId);
-    commit(result.playlists);
-    setRequestedPlaylistId(targetId);
-    setStatus(result.added > 0
-      ? `已把《${pickerTrack.title}》加入《${target?.name ?? "歌单"}》。`
-      : `《${pickerTrack.title}》已经在《${target?.name ?? "歌单"}》中。`);
-    setPickerTrack(null);
-    setPickerNewName("");
-  };
-
   const playPlaylist = () => {
     if (!selectedPlaylist || selectedPlaylist.tracks.length === 0) {
       setStatus("这份歌单还没有曲目。");
       return;
     }
-    props.onPlayMusicQueue(
-      selectedPlaylist.tracks.map((track) => track.musicId),
-      selectedPlaylist.tracks[0].musicId,
-    );
+    props.onPlayPlaylist(selectedPlaylist.id);
     setStatus(`开始播放《${selectedPlaylist.name}》。`);
   };
 
@@ -229,8 +178,7 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
   };
 
   return (
-    <>
-      <Drawer
+    <Drawer
       anchor="right"
       open={props.open}
       onClose={props.onClose}
@@ -272,6 +220,7 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
               variant={playlist.id === selectedPlaylistId ? "contained" : "outlined"}
               onClick={() => {
                 setRequestedPlaylistId(playlist.id);
+                props.onSelectPlaylist(playlist.id);
                 setPicked(new Set());
                 setStatus("");
               }}
@@ -306,6 +255,9 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
                 onClick={() => {
                   if (!window.confirm(`删除歌单《${selectedPlaylist.name}》？`)) { return; }
                   commit(props.playlists.filter((playlist) => playlist.id !== selectedPlaylist.id));
+                  if (props.activePlaylistId === selectedPlaylist.id) {
+                    props.onSelectPlaylist("");
+                  }
                   setRequestedPlaylistId("");
                   setStatus("歌单已删除。");
                 }}
@@ -342,24 +294,15 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
                       {track.characterId} · {track.album || parseMusicInfo(track.musicId).album}
                     </Typography>
                   </Box>
-                  <IconButton
-                    size="small"
-                    title={`加入默认歌单《${DefaultPlaylistName}》`}
-                    aria-label="加入默认歌单"
+                  <PlaylistTrackActions
+                    track={track}
+                    playlists={props.playlists}
+                    onPlaylistsChange={props.onPlaylistsChange}
+                    preferredPlaylistId={selectedPlaylistId}
                     disabled={props.disabled}
-                    onClick={() => { addToDefaultPlaylist(track); }}
-                  >
-                    <AddIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    title="选择要加入的歌单"
-                    aria-label="选择歌单"
-                    disabled={props.disabled}
-                    onClick={() => { openPlaylistPicker(track); }}
-                  >
-                    <CreateNewFolderIcon fontSize="small" />
-                  </IconButton>
+                    onStatus={setStatus}
+                    onAfterAdd={setRequestedPlaylistId}
+                  />
                   <Button
                     size="small"
                     disabled={index === 0}
@@ -459,30 +402,15 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
                     {track.album} · {track.characterId}
                   </Typography>
                 </Box>
-                <IconButton
-                  size="small"
-                  title={`加入默认歌单《${DefaultPlaylistName}》`}
-                  aria-label="加入默认歌单"
+                <PlaylistTrackActions
+                  track={makeTrack(track)}
+                  playlists={props.playlists}
+                  onPlaylistsChange={props.onPlaylistsChange}
+                  preferredPlaylistId={selectedPlaylistId}
                   disabled={props.disabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    addToDefaultPlaylist(makeTrack(track));
-                  }}
-                >
-                  <AddIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  title="选择要加入的歌单"
-                  aria-label="选择歌单"
-                  disabled={props.disabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openPlaylistPicker(makeTrack(track));
-                  }}
-                >
-                  <CreateNewFolderIcon fontSize="small" />
-                </IconButton>
+                  onStatus={setStatus}
+                  onAfterAdd={setRequestedPlaylistId}
+                />
                 {already && <Typography sx={smallText}>已在歌单</Typography>}
               </Stack>
             );
@@ -504,67 +432,6 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
           void importPlaylists(file);
         }}
       />
-      </Drawer>
-      <Dialog
-        open={pickerTrack !== null}
-        onClose={closePlaylistPicker}
-        fullWidth
-        maxWidth="xs"
-      >
-        <DialogTitle
-          data-testid="playlist-picker-title"
-          sx={{ fontFamily: NoFontFamily, fontSize: "1.05em" }}
-        >
-          {pickerTrack
-            ? `把《${pickerTrack.title || parseMusicInfo(pickerTrack.musicId).title}》加入歌单`
-            : "加入歌单"}
-        </DialogTitle>
-        <DialogContent data-testid="playlist-picker-content">
-          <Typography sx={{ ...smallText, marginBottom: 1 }}>
-            选择一份歌单，或直接输入新歌单名称。
-          </Typography>
-          <RadioGroup
-            value={pickerPlaylistId}
-            onChange={(event) => {
-              setPickerPlaylistId(event.target.value);
-              setPickerNewName("");
-            }}
-          >
-            {props.playlists.map((playlist) => (
-              <FormControlLabel
-                key={playlist.id}
-                value={playlist.id}
-                control={<Radio size="small" />}
-                label={`${playlist.name}（${playlist.tracks.length} 首）`}
-                sx={{ "& .MuiFormControlLabel-label": { fontFamily: NoFontFamily, fontSize: "0.86em" } }}
-              />
-            ))}
-          </RadioGroup>
-          <TextField
-            size="small"
-            fullWidth
-            value={pickerNewName}
-            onChange={(event) => {
-              setPickerNewName(event.target.value);
-              if (event.target.value.trim()) { setPickerPlaylistId(""); }
-            }}
-            placeholder="或者新建歌单"
-            inputProps={{ maxLength: 120 }}
-            sx={{ marginTop: 1, "& input": { fontFamily: NoFontFamily, fontSize: "0.82em" } }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closePlaylistPicker}>取消</Button>
-          <Button
-            data-testid="playlist-picker-add"
-            variant="contained"
-            disabled={!pickerPlaylistId && !pickerNewName.trim()}
-            onClick={addToPickedPlaylist}
-          >
-            加入
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
+    </Drawer>
   );
 }

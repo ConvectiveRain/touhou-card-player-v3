@@ -24,6 +24,7 @@ export type PlaylistStoreFile = {
 };
 
 export const PlaylistStorageKey = "card-player-playlists-v1";
+export const ActivePlaylistStorageKey = "card-player-active-playlist-v1";
 export const DefaultPlaylistName = "默认歌单";
 
 function makeId(): string {
@@ -107,6 +108,21 @@ export function savePlaylistStore(playlists: Array<MusicPlaylist>): void {
   }
 }
 
+export function loadActivePlaylistId(playlists: Array<MusicPlaylist>): string {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") { return ""; }
+  const id = window.localStorage.getItem(ActivePlaylistStorageKey) ?? "";
+  return playlists.some((playlist) => playlist.id === id) ? id : "";
+}
+
+export function saveActivePlaylistId(playlistId: string): void {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") { return; }
+  if (playlistId) {
+    window.localStorage.setItem(ActivePlaylistStorageKey, playlistId);
+  } else {
+    window.localStorage.removeItem(ActivePlaylistStorageKey);
+  }
+}
+
 export function createPlaylist(
   name: string,
   tracks: Array<PlaylistTrack> = [],
@@ -168,25 +184,19 @@ export function addTrackToDefaultPlaylist(
 
 /**
  * The card game can put each character on the board only once. A playlist may contain many
- * tracks by one character, so the game uses the first playlist track for each character while
- * the normal player still queues every track in playlist order.
+ * tracks by one character, so selection builders collapse the playlist to one track per
+ * character. Callers can supply a random picker; the default keeps the first track.
  */
-export function buildPlaylistGameSelection(
+export function groupPlaylistTracksByCharacter(
   playlist: MusicPlaylist,
   globalData: GlobalData,
-): { selection: MusicSelectionMap; order: Array<CharacterId> } {
-  const selection: MusicSelectionMap = new Map();
-  globalData.characterConfigs.forEach((_config, characterId) => {
-    selection.set(characterId, -1);
-  });
-
-  const order: Array<CharacterId> = [];
+): Map<CharacterId, Array<PlaylistTrack>> {
+  const groups = new Map<CharacterId, Array<PlaylistTrack>>();
   for (const track of playlist.tracks) {
     if (!globalData.sources.has(track.musicId)) { continue; }
     let characterId = track.characterId;
     let config = globalData.characterConfigs.get(characterId);
     let index = config ? config.musics.indexOf(track.musicId) : -1;
-
     if (index < 0) {
       for (const [candidateId, candidateConfig] of globalData.characterConfigs) {
         const candidateIndex = candidateConfig.musics.indexOf(track.musicId);
@@ -198,9 +208,30 @@ export function buildPlaylistGameSelection(
         }
       }
     }
-    if (index < 0 || selection.get(characterId) !== -1) { continue; }
-    selection.set(characterId, index);
-    order.push(characterId);
+    if (!config || index < 0) { continue; }
+    if (!groups.has(characterId)) { groups.set(characterId, []); }
+    groups.get(characterId)?.push(track);
+  }
+  return groups;
+}
+
+export function buildPlaylistGameSelection(
+  playlist: MusicPlaylist,
+  globalData: GlobalData,
+  pickTrack: (tracks: Array<PlaylistTrack>) => PlaylistTrack = (tracks) => tracks[0],
+): { selection: MusicSelectionMap; order: Array<CharacterId> } {
+  const selection: MusicSelectionMap = new Map();
+  globalData.characterConfigs.forEach((_config, characterId) => {
+    selection.set(characterId, -1);
+  });
+
+  const groups = groupPlaylistTracksByCharacter(playlist, globalData);
+  const order = [...groups.keys()];
+  for (const [characterId, tracks] of groups) {
+    const chosen = pickTrack(tracks);
+    const config = globalData.characterConfigs.get(characterId);
+    const index = config ? config.musics.indexOf(chosen.musicId) : -1;
+    if (index >= 0) { selection.set(characterId, index); }
   }
   return { selection, order };
 }

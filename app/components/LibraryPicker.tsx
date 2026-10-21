@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Box, Button, Checkbox, Divider, Drawer, MenuItem, Select, Stack, ToggleButton, ToggleButtonGroup,
-  Typography,
+  Alert, Box, Button, Checkbox, Divider, Drawer, MenuItem, Select, Stack, ToggleButton,
+  ToggleButtonGroup, Typography,
 } from "@mui/material";
 import Image from "next/image";
 import { GlobalData, MusicSelectionMap } from "../types/Configs";
@@ -12,7 +12,9 @@ import { parseMusicInfo } from "../lib/music";
 import { getFeatures } from "../lib/features";
 import { fetchJson } from "../lib/fetchJson";
 import { MusicScope } from "../lib/originalScope";
+import type { MusicPlaylist } from "../lib/playlists";
 import { NoFontFamily, theme } from "./Theme";
+import PlaylistTrackActions from "./PlaylistTrackActions";
 
 /**
  * 顶部挑选面板：社团筛选 + 角色卡 + 专辑列表。
@@ -62,6 +64,10 @@ export interface LibraryPickerProps {
   onPlayMusicQueue: (musicIds: Array<string>, musicId: string) => void;
   /** 当前真正加载的曲目，用于跨角色/专辑队列高亮。 */
   activeMusicId: string | null;
+  playlists: Array<MusicPlaylist>;
+  activePlaylistId: string;
+  activePlaylistMusicIds?: ReadonlySet<string> | null;
+  onPlaylistsChange: (playlists: Array<MusicPlaylist>) => void;
   disabled?: boolean;
 }
 
@@ -80,6 +86,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   const [keyword, setKeyword] = useState("");
   const [trackQuery, setTrackQuery] = useState("");
   const [browsedAlbum, setBrowsedAlbum] = useState<AlbumBrowse | null>(null);
+  const [playlistActionStatus, setPlaylistActionStatus] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -479,11 +486,23 @@ export default function LibraryPicker(props: LibraryPickerProps) {
               )}
               {shownTracks.map((track) => {
                 const active = props.activeMusicId === track.musicId;
+                const playlistBlocked = !!props.activePlaylistMusicIds
+                  && !props.activePlaylistMusicIds.has(track.musicId);
+                const playlistTrack = {
+                  musicId: track.musicId,
+                  characterId: track.characterId ?? "",
+                  title: track.title,
+                  album: track.album,
+                  addedAt: new Date().toISOString(),
+                };
                 return (
                   <Box
                     key={`${track.characterId}-${track.musicId}`}
+                    data-testid="library-track-row"
+                    data-music-id={track.musicId}
+                    title={playlistBlocked ? "这首歌不在当前选定歌单中，不能播放" : undefined}
                     onClick={() => {
-                      if (props.disabled) { return; }
+                      if (props.disabled || playlistBlocked) { return; }
                       if (albumBrowse) {
                         const albumMusicIds = props.scope === "single"
                           ? (albumTracks.get(albumBrowse.album.id) ?? [])
@@ -493,14 +512,20 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                         if (track.characterId) {
                           setBrowsedAlbum({ album: albumBrowse.album, anchor: track.characterId });
                         }
-                        props.onPlayMusicQueue(albumMusicIds, track.musicId);
+                        if (props.activePlaylistMusicIds && track.characterId && track.index >= 0) {
+                          playTrack(track.characterId, track.index);
+                        } else {
+                          props.onPlayMusicQueue(albumMusicIds, track.musicId);
+                        }
                       } else if (track.characterId && track.index >= 0) {
                         playTrack(track.characterId, track.index);
                       }
                     }}
                     sx={{
                       display: "flex", alignItems: "center", gap: 1, padding: "3px 6px",
-                      cursor: props.disabled ? "default" : "pointer", borderRadius: 1,
+                      cursor: props.disabled || playlistBlocked ? "default" : "pointer",
+                      opacity: playlistBlocked ? 0.42 : 1,
+                      borderRadius: 1,
                       backgroundColor: active ? "rgba(193,72,72,0.35)" : "transparent",
                       "&:hover": { backgroundColor: "rgba(255,255,255,0.08)" },
                     }}
@@ -528,10 +553,28 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                         {track.characterId}
                       </Typography>
                     )}
+                    <PlaylistTrackActions
+                      track={playlistTrack}
+                      playlists={props.playlists}
+                      onPlaylistsChange={props.onPlaylistsChange}
+                      preferredPlaylistId={props.activePlaylistId}
+                      disabled={props.disabled}
+                      onStatus={setPlaylistActionStatus}
+                    />
                   </Box>
                 );
               })}
           </Box>
+
+          {playlistActionStatus && (
+            <Alert
+              severity="info"
+              sx={{ order: 5, fontFamily: NoFontFamily, fontSize: "0.76em" }}
+              onClose={() => { setPlaylistActionStatus(""); }}
+            >
+              {playlistActionStatus}
+            </Alert>
+          )}
 
           {topPanel === "characters" && (
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, maxHeight: "34vh", overflowY: "auto", order: 1 }}>

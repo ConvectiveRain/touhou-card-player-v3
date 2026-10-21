@@ -25,10 +25,15 @@ export type MusicPlayerOptions = {
   characterTemporaryDisabled: Map<CharacterId, boolean>;
   currentCharacterId: CharacterId;
   setCurrentCharacterId: (characterId: CharacterId) => void;
+  setMusicSelection: (selection: MusicSelectionMap) => void;
   setPlayingOrder: (order: Array<CharacterId>) => void;
   setCharacterTemporaryDisabled: (map: Map<CharacterId, boolean>) => void;
   /** False until the dataset has loaded; the player stays idle until then. */
   ready: boolean;
+  /** When set, every playable queue is restricted to these music ids. */
+  allowedMusicIds?: ReadonlySet<MusicUniqueId> | null;
+  /** Playlist choices for the active playlist, grouped by character. */
+  playlistTracksByCharacter?: ReadonlyMap<CharacterId, Array<MusicUniqueId>> | null;
 };
 
 export type MusicPlayerStore = {
@@ -62,6 +67,7 @@ export type MusicPlayerStore = {
   playSelection: () => void;
   /** 播放一张专辑中的某一首；上一首 / 下一首沿这张专辑走。 */
   playMusicQueue: (musicIds: Array<MusicUniqueId>, musicId: MusicUniqueId) => void;
+  clearMusicQueue: () => void;
   /** 当前真正加载的曲目（可能来自角色队列，也可能来自专辑队列）。 */
   activeMusicId: MusicUniqueId | null;
   currentMusicInfo: MusicInfo | null;
@@ -78,8 +84,9 @@ export type MusicPlayerStore = {
 export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   const {
     globalData, musicSelection, playingOrder, characterTemporaryDisabled,
-    currentCharacterId, setCurrentCharacterId, setPlayingOrder,
-    setCharacterTemporaryDisabled, ready,
+    currentCharacterId, setCurrentCharacterId, setMusicSelection, setPlayingOrder,
+    setCharacterTemporaryDisabled, ready, allowedMusicIds = null,
+    playlistTracksByCharacter = null,
   } = options;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -102,6 +109,9 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     musicIds: Array<MusicUniqueId>;
     index: number;
   } | null>(null);
+  const musicAllowed = useCallback((musicId: MusicUniqueId): boolean => (
+    allowedMusicIds === null || allowedMusicIds.has(musicId)
+  ), [allowedMusicIds]);
   // True while something (the About tab) asked for the countdown to stay off temporarily.
   const countdownSuspendedRef = useRef<boolean>(false);
 
@@ -133,10 +143,12 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   const getMusicSourceUrl = useCallback((character: CharacterId): string | null => {
     if (directQueue) {
       const musicId = directQueue.musicIds[directQueue.index];
-      return musicId ? globalData.sources.get(musicId) || null : null;
+      return musicId && musicAllowed(musicId) ? globalData.sources.get(musicId) || null : null;
     }
+    const musicId = musicIdFor(globalData, musicSelection, character);
+    if (!musicId || !musicAllowed(musicId)) { return null; }
     return musicSourceFor(globalData, musicSelection, character);
-  }, [directQueue, globalData, musicSelection]);
+  }, [directQueue, globalData, musicAllowed, musicSelection]);
 
   // region transport
 
@@ -209,11 +221,14 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
    */
   const playSelection = useCallback(() => {
     setDirectQueue(null);
+    const musicId = currentCharacterId === ""
+      ? null
+      : musicIdFor(globalData, musicSelection, currentCharacterId);
+    if (!musicId || !musicAllowed(musicId)) { return; }
+    const sourceUrl = globalData.sources.get(musicId) ?? null;
+    if (!sourceUrl) { return; }
     setPlaybackState(PlaybackState.Playing);
     const audio = audioRef.current;
-    const sourceUrl = currentCharacterId === ""
-      ? null
-      : musicSourceFor(globalData, musicSelection, currentCharacterId);
     if (audio && sourceUrl !== null && audio.getAttribute("src") === sourceUrl) {
       audio.play().catch((error: unknown) => {
         // 点卡片时若同时换了曲目，这一次 play() 会被新的加载请求打断（AbortError），属预期；
@@ -223,7 +238,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
         }
       });
     }
-  }, [currentCharacterId, globalData, musicSelection]);
+  }, [currentCharacterId, globalData, musicAllowed, musicSelection]);
 
   /**
    * Keep the card display and the playing order in sync with a track that came from an
@@ -231,16 +246,36 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
    * remains on the character selected before entering the album.
    */
   const syncCharacterForMusic = useCallback((musicId: MusicUniqueId) => {
+    if (!musicAllowed(musicId)) { return; }
     const characterId = characterIdForMusic(globalData, musicId);
     if (characterId === null) { return; }
     setCurrentCharacterId(characterId);
     if (!playingOrder.includes(characterId)) {
       setPlayingOrder([...playingOrder, characterId]);
     }
-  }, [globalData, playingOrder, setCurrentCharacterId, setPlayingOrder]);
+  }, [globalData, musicAllowed, playingOrder, setCurrentCharacterId, setPlayingOrder]);
+
+  const choosePlaylistTrackForCharacter = useCallback((characterId: CharacterId): number | null => {
+    const choices = playlistTracksByCharacter?.get(characterId);
+    if (!choices || choices.length === 0) { return null; }
+    const musicId = choices[Math.floor(Math.random() * choices.length)];
+    const config = globalData.characterConfigs.get(characterId);
+    const index = config ? config.musics.indexOf(musicId) : -1;
+    if (index < 0) { return null; }
+    const nextSelection = new Map(musicSelection);
+    nextSelection.set(characterId, index);
+    setMusicSelection(nextSelection);
+    return index;
+  }, [
+    globalData, musicSelection, playlistTracksByCharacter, setMusicSelection,
+  ]);
+
+  const clearMusicQueue = useCallback(() => {
+    setDirectQueue(null);
+  }, []);
 
   const playMusicQueue = useCallback((musicIds: Array<MusicUniqueId>, musicId: MusicUniqueId) => {
-    const playable = musicIds.filter((id) => globalData.sources.has(id));
+    const playable = musicIds.filter((id) => globalData.sources.has(id) && musicAllowed(id));
     const index = playable.indexOf(musicId);
     if (index < 0) { return; }
     syncCharacterForMusic(musicId);
@@ -255,7 +290,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
         }
       });
     }
-  }, [globalData, syncCharacterForMusic]);
+  }, [globalData, musicAllowed, syncCharacterForMusic]);
 
   /** Pauses without marking the track stopped, so a later play resumes where it left off. */
   const pauseForGame = useCallback(() => {
@@ -296,7 +331,16 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
       const characterId = playingOrder[index];
       const selection = musicSelection.get(characterId);
       const isDisabled = characterTemporaryDisabled.get(characterId);
-      if (selection !== undefined && selection !== -1 && !isDisabled) {
+      if (isDisabled) { continue; }
+      const randomizedIndex = playlistTracksByCharacter
+        ? choosePlaylistTrackForCharacter(characterId)
+        : null;
+      const nextSelection = randomizedIndex ?? selection;
+      const musicId = nextSelection !== undefined && nextSelection !== -1
+        ? globalData.characterConfigs.get(characterId)?.musics[nextSelection]
+        : null;
+      if (nextSelection !== undefined && nextSelection !== -1
+        && musicId && musicAllowed(musicId)) {
         setCurrentCharacterId(characterId);
         // 「切歌不播放」：换到新曲目后停在暂停状态，等用户自己按播放键
         if (stateRef.current.playbackSetting.pauseOnSwitch) {
@@ -307,6 +351,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     }
   }, [
     directQueue, playingOrder, currentCharacterId, musicSelection, characterTemporaryDisabled,
+    globalData, musicAllowed, playlistTracksByCharacter, choosePlaylistTrackForCharacter,
     setCurrentCharacterId, syncCharacterForMusic, pause,
   ]);
 
@@ -464,6 +509,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     pause,
     playSelection,
     playMusicQueue,
+    clearMusicQueue,
     activeMusicId,
     currentMusicInfo,
     previous,

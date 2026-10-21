@@ -691,7 +691,11 @@ export function useGameSession(props: GameSessionProps): GameSession {
   const notifyStartGame = useCallback((order: Array<CharacterId> | null): Array<CharacterId> => {
     let playlistOrder: Array<CharacterId> | null = null;
     if (activeGamePlaylist) {
-      const game = buildPlaylistGameSelection(activeGamePlaylist, data);
+      const game = buildPlaylistGameSelection(
+        activeGamePlaylist,
+        data,
+        (tracks) => tracks[Math.floor(Math.random() * tracks.length)],
+      );
       playlistOrder = game.order;
       // This callback runs synchronously from the rules engine before React commits, so update
       // the mirror used by the multiplayer sync payload as well as the rendered state.

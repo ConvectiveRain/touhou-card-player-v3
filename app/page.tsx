@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PlayerTab from "./components/PlayerTab";
-import { CharacterId, MusicSelectionMap } from "./types/Configs";
+import {
+  CharacterId, MusicSelectionMap, MusicUniqueId, PlaybackState,
+} from "./types/Configs";
 import { Box, Button, CssBaseline, Divider, Paper, Stack } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { NoFontFamily, theme } from "./components/Theme";
@@ -22,8 +24,8 @@ import { usePlaybackHotkeys } from "./lib/usePlaybackHotkeys";
 import { getFeatures } from "./lib/features";
 import { resolveJoinLink } from "./lib/joinLink";
 import {
-  buildPlaylistGameSelection, loadPlaylistStore, MusicPlaylist,
-  savePlaylistStore,
+  buildPlaylistGameSelection, groupPlaylistTracksByCharacter, loadActivePlaylistId,
+  loadPlaylistStore, MusicPlaylist, saveActivePlaylistId, savePlaylistStore,
 } from "./lib/playlists";
 
 // The tab order used by both the header buttons and the tab container.
@@ -96,11 +98,16 @@ const AliceTabLabels = [
 ];
 const AliceCharacterId = "アリス・マーガトロイド";
 
+function pickRandomPlaylistTrack<T>(tracks: Array<T>): T {
+  return tracks[Math.floor(Math.random() * tracks.length)];
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<number>(0);
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [playlists, setPlaylists] = useState<Array<MusicPlaylist>>([]);
   const [activePlaylistId, setActivePlaylistId] = useState<string>("");
+  const pendingPlayPlaylistRef = useRef<string>("");
   const playlistSnapshotRef = useRef<{
     musicSelection: MusicSelectionMap;
     playingOrder: Array<CharacterId>;
@@ -116,6 +123,30 @@ export default function Home() {
     currentCharacterId, setCurrentCharacterId,
   } = gameData;
 
+  const activeGamePlaylist = playlists.find(
+    (playlist) => playlist.id === activePlaylistId,
+  ) ?? null;
+  const activePlaylistMusicIds = useMemo<ReadonlySet<MusicUniqueId> | null>(() => {
+    if (!activeGamePlaylist) { return null; }
+    return new Set(
+      activeGamePlaylist.tracks
+        .map((track) => track.musicId)
+        .filter((musicId) => globalData.sources.has(musicId)),
+    );
+  }, [activeGamePlaylist, globalData]);
+  const activePlaylistTracksByCharacter = useMemo<
+    ReadonlyMap<CharacterId, Array<MusicUniqueId>> | null
+  >(() => {
+    if (!activeGamePlaylist) { return null; }
+    return new Map(
+      [...groupPlaylistTracksByCharacter(activeGamePlaylist, globalData)]
+        .map(([characterId, tracks]) => [
+          characterId,
+          tracks.map((track) => track.musicId),
+        ] as const),
+    );
+  }, [activeGamePlaylist, globalData]);
+
   const player = useMusicPlayer({
     globalData,
     musicSelection,
@@ -123,13 +154,23 @@ export default function Home() {
     characterTemporaryDisabled,
     currentCharacterId,
     setCurrentCharacterId,
+    setMusicSelection,
     setPlayingOrder,
     setCharacterTemporaryDisabled,
     ready,
+    allowedMusicIds: activePlaylistMusicIds,
+    playlistTracksByCharacter: activePlaylistTracksByCharacter,
   });
+  const {
+    inGame: playerInGame,
+    clearMusicQueue,
+    setPlaybackState: setPlayerPlaybackState,
+  } = player;
 
   useEffect(() => {
-    setPlaylists(loadPlaylistStore().playlists);
+    const storedPlaylists = loadPlaylistStore().playlists;
+    setPlaylists(storedPlaylists);
+    setActivePlaylistId(loadActivePlaylistId(storedPlaylists));
   }, []);
 
   const updatePlaylists = useCallback((next: Array<MusicPlaylist>) => {
@@ -150,10 +191,10 @@ export default function Home() {
     if (playlistId === "") {
       restorePlaylistSnapshot();
       setActivePlaylistId("");
+      saveActivePlaylistId("");
+      clearMusicQueue();
       return;
     }
-    const playlist = playlists.find((item) => item.id === playlistId);
-    if (!playlist) { return; }
     if (!playlistSnapshotRef.current) {
       playlistSnapshotRef.current = {
         musicSelection: new Map(musicSelection),
@@ -161,34 +202,63 @@ export default function Home() {
         currentCharacterId,
       };
     }
+    saveActivePlaylistId(playlistId);
     setActivePlaylistId(playlistId);
   }, [
-    currentCharacterId, musicSelection, playingOrder, playlists, restorePlaylistSnapshot,
+    currentCharacterId, musicSelection, playingOrder, clearMusicQueue,
+    restorePlaylistSnapshot,
   ]);
 
   useEffect(() => {
-    if (!ready || !activePlaylistId || player.inGame) { return; }
+    if (!ready || !activePlaylistId || playerInGame) { return; }
     const playlist = playlists.find((item) => item.id === activePlaylistId);
     if (!playlist) {
       restorePlaylistSnapshot();
       setActivePlaylistId("");
+      saveActivePlaylistId("");
+      clearMusicQueue();
       return;
     }
-    const game = buildPlaylistGameSelection(playlist, globalData);
+    const game = buildPlaylistGameSelection(playlist, globalData, pickRandomPlaylistTrack);
     setMusicSelection(game.selection);
     setPlayingOrder(game.order);
     setCurrentCharacterId(game.order[0] ?? "");
+    clearMusicQueue();
+    if (pendingPlayPlaylistRef.current === playlist.id) {
+      pendingPlayPlaylistRef.current = "";
+      setPlayerPlaybackState(
+        game.order.length > 0 ? PlaybackState.Playing : PlaybackState.Stopped,
+      );
+    }
     // The playlist is the source of truth while it is selected; user edits are applied here.
   }, [
-    ready, activePlaylistId, playlists, globalData, player.inGame,
+    ready, activePlaylistId, playlists, globalData, playerInGame,
+    clearMusicQueue, setPlayerPlaybackState,
     restorePlaylistSnapshot, setCurrentCharacterId, setMusicSelection, setPlayingOrder,
   ]);
 
-  const isOnSmallerScreen = useIsSmallScreen();
-  const activeGamePlaylist = playlists.find(
-    (playlist) => playlist.id === activePlaylistId,
-  ) ?? null;
+  const playPlaylistById = useCallback((playlistId: string) => {
+    const playlist = playlists.find((item) => item.id === playlistId);
+    if (!playlist) { return; }
+    if (activePlaylistId !== playlistId) {
+      pendingPlayPlaylistRef.current = playlistId;
+      chooseGamePlaylist(playlistId);
+      return;
+    }
+    const game = buildPlaylistGameSelection(playlist, globalData, pickRandomPlaylistTrack);
+    setMusicSelection(game.selection);
+    setPlayingOrder(game.order);
+    setCurrentCharacterId(game.order[0] ?? "");
+    clearMusicQueue();
+    setPlayerPlaybackState(
+      game.order.length > 0 ? PlaybackState.Playing : PlaybackState.Stopped,
+    );
+  }, [
+    activePlaylistId, chooseGamePlaylist, globalData, clearMusicQueue,
+    setPlayerPlaybackState, playlists, setCurrentCharacterId, setMusicSelection, setPlayingOrder,
+  ]);
 
+  const isOnSmallerScreen = useIsSmallScreen();
   // `[` / `]` / space drive the transport, but only where the transport is on screen: the
   // Player and List tabs, and never while a match owns the music.
   const playbackHotkeysEnabled = !player.inGame
@@ -281,6 +351,10 @@ export default function Home() {
               onPlaySelection={player.playSelection}
               onPlayMusicQueue={player.playMusicQueue}
               activeMusicId={player.activeMusicId}
+              playlists={playlists}
+              activePlaylistId={activePlaylistId}
+              activePlaylistMusicIds={activePlaylistMusicIds}
+              onPlaylistsChange={updatePlaylists}
               disabled={player.inGame}
             />
             <Button
@@ -448,8 +522,10 @@ export default function Home() {
         data={globalData}
         disabled={player.inGame}
         playlists={playlists}
+        activePlaylistId={activePlaylistId}
         onPlaylistsChange={updatePlaylists}
-        onPlayMusicQueue={player.playMusicQueue}
+        onSelectPlaylist={chooseGamePlaylist}
+        onPlayPlaylist={playPlaylistById}
       />
     </ThemeProvider>
   );

@@ -31,20 +31,10 @@ export interface PlayerControlProps {
   onPause(): void;
 };
 
-function PlaybackIconButton({ disabled, onClick, children }: 
-  { 
-    disabled?: boolean; onClick: () => void,
-    children?: React.ReactNode
-  }
-) {
-  if (disabled === undefined) {
-    disabled = false;
-  }
+function PlaybackIconButton(props: React.ComponentProps<typeof IconButton>) {
+  const { disabled = false, children, ...rest } = props;
   return (
-    <IconButton 
-      onClick={onClick} disabled={disabled} size="large"
-      color="primary"
-    >
+    <IconButton {...rest} disabled={disabled} size="large" color="primary">
       {children}
     </IconButton>
   );
@@ -72,17 +62,19 @@ export default function PlayerControl({
   const buttons = (
     <Stack direction="row" spacing={4} alignItems="center">
       <PlaybackIconButton 
+        aria-label="上一首"
         onClick={onPreviousMusic} 
       >
         <LeftIcon fontSize="large"/>
       </PlaybackIconButton>
       <PlaybackIconButton 
+        aria-label={toggleAction === "play" ? "播放" : "暂停"}
         disabled={toggleAction === null}
         onClick={toggleAction === "play" ? onPlay : onPause}
       >
         {playbackState !== PlaybackState.Playing ? <PlayIcon fontSize="large"/> : <PauseIcon fontSize="large"/>}
       </PlaybackIconButton>
-      <PlaybackIconButton onClick={onNextMusic} >
+      <PlaybackIconButton aria-label="下一首" onClick={onNextMusic} >
         <RightIcon fontSize="large"/>
       </PlaybackIconButton>
     </Stack>

@@ -36,6 +36,7 @@ let nextId = 1;
 const pending = new Map();
 const exceptions = [];
 const consoleErrors = [];
+let currentPhase = "startup";
 socket.addEventListener("message", (event) => {
   const message = JSON.parse(event.data);
   if (message.id) {
@@ -48,7 +49,7 @@ socket.addEventListener("message", (event) => {
   }
   if (message.method === "Runtime.exceptionThrown") {
     const details = message.params.exceptionDetails;
-    exceptions.push(details.exception?.description || details.text || "runtime exception");
+    exceptions.push(`[${currentPhase}] ${details.exception?.description || details.text || "runtime exception"}`);
   }
   if (message.method === "Runtime.consoleAPICalled" && message.params.type === "error") {
     consoleErrors.push(message.params.args.map((arg) => (
@@ -120,8 +121,10 @@ await send("Emulation.setDeviceMetricsOverride", {
   deviceScaleFactor: 1,
   mobile: false,
 });
+currentPhase = "initial-load";
 await send("Page.navigate", { url: `${base}/?locale=zh&playlist-e2e=${Date.now()}` });
 await waitFor(`document.readyState === "complete" && document.body.innerText.includes("我的歌单")`);
+currentPhase = "clear-and-reload";
 await evaluate(`localStorage.clear()`);
 await send("Page.reload", { ignoreCache: true });
 await waitFor(`document.readyState === "complete" && document.body.innerText.includes("我的歌单")`);
@@ -242,6 +245,89 @@ if (quickActionState.playlistRows !== 3
 }
 await screenshot(managerScreenshot);
 
+await evaluate(`(() => {
+  const close = [...document.querySelectorAll(".MuiDrawer-paper button")].find(
+    (item) => item.textContent?.trim() === "关闭",
+  );
+  close?.click();
+  const tracksButton = [...document.querySelectorAll("button")].find(
+    (item) => item.textContent?.trim() === "曲目",
+  );
+  tracksButton.click();
+})()`);
+await waitFor(`document.querySelectorAll('[data-testid="library-track-row"]').length > 0`);
+await sleep(1000);
+
+currentPhase = "track-drawer";
+const libraryActions = await evaluate(`(() => {
+  const rows = [...document.querySelectorAll('[data-testid="library-track-row"]')];
+  return {
+    rows: rows.length,
+    withTwoButtons: rows.filter(
+      (row) => row.querySelectorAll('button[aria-label="加入默认歌单"], button[aria-label="选择歌单"]').length === 2,
+    ).length,
+  };
+})()`);
+if (libraryActions.rows === 0 || libraryActions.withTwoButtons !== libraryActions.rows) {
+  throw new Error(`track drawer is missing playlist actions: ${JSON.stringify(libraryActions)}`);
+}
+
+const restrictionState = await evaluate(`(() => {
+  const store = JSON.parse(localStorage.getItem("card-player-playlists-v1"));
+  const playlist = store.playlists.find((item) => item.name === ${JSON.stringify(playlistName)});
+  const allowed = new Set(playlist.tracks.map((track) => track.musicId));
+  const blocked = [...document.querySelectorAll('[data-testid="library-track-row"]')]
+    .find((row) => !allowed.has(row.dataset.musicId));
+  if (!blocked) { throw new Error("no out-of-playlist track to test"); }
+  const before = localStorage.getItem("musicSelection");
+  blocked.click();
+  return { before, blockedId: blocked.dataset.musicId, allowed: [...allowed] };
+})()`);
+await sleep(700);
+const selectionAfterBlockedClick = await evaluate(`localStorage.getItem("musicSelection")`);
+if (selectionAfterBlockedClick !== restrictionState.before) {
+  throw new Error(`out-of-playlist track changed selection: ${JSON.stringify({
+    restrictionState, selectionAfterBlockedClick,
+  })}`);
+}
+
+const randomContext = await evaluate(`(() => {
+  const store = JSON.parse(localStorage.getItem("card-player-playlists-v1"));
+  const playlist = store.playlists.find((item) => item.name === ${JSON.stringify(playlistName)});
+  const order = JSON.parse(localStorage.getItem("playingOrder"));
+  if (order.length !== 1) { throw new Error("expected one playlist character in E2E"); }
+  const characterId = order[0];
+  const tracks = playlist.tracks.filter((track) => track.characterId === characterId);
+  if (tracks.length < 2) { throw new Error("expected multiple playlist tracks for one character"); }
+  return { characterId, musicIds: tracks.map((track) => track.musicId) };
+})()`);
+const characterData = await fetch(`${base}/character.json`).then((response) => response.json());
+const characterMusic = characterData[randomContext.characterId]?.music;
+const characterMusicIds = Array.isArray(characterMusic) ? characterMusic : [characterMusic];
+
+await evaluate(`(() => {
+  window.__e2eOriginalRandom = Math.random;
+  Math.random = () => 0;
+})()`);
+await evaluate(`document.querySelector('button[aria-label="下一首"]').click()`);
+await waitFor(`(() => {
+  const selection = JSON.parse(localStorage.getItem("musicSelection"));
+  return selection[${JSON.stringify(randomContext.characterId)}]
+    === ${JSON.stringify(characterMusicIds.indexOf(randomContext.musicIds[0]))};
+})()`);
+await evaluate(`(() => { Math.random = () => 0.999999; })()`);
+await evaluate(`document.querySelector('button[aria-label="下一首"]').click()`);
+await waitFor(`(() => {
+  const selection = JSON.parse(localStorage.getItem("musicSelection"));
+  return selection[${JSON.stringify(randomContext.characterId)}]
+    === ${JSON.stringify(characterMusicIds.indexOf(randomContext.musicIds.at(-1)))};
+})()`);
+await evaluate(`(() => {
+  Math.random = window.__e2eOriginalRandom;
+  delete window.__e2eOriginalRandom;
+})()`);
+
+currentPhase = "reload-after-quick-add";
 await send("Page.reload", { ignoreCache: true });
 await waitFor(`document.readyState === "complete" && document.body.innerText.includes("我的歌单")`);
 const storedAfterReload = await evaluate(`JSON.parse(localStorage.getItem("card-player-playlists-v1"))`);

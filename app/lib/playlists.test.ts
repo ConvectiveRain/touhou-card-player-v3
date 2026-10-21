@@ -58,6 +58,24 @@ describe("playlist persistence helpers", () => {
     expect(game.selection.get("marisa")).toBe(0);
   });
 
+  it("chooses one playlist track per character with the supplied picker", () => {
+    const data = dataWithTracks();
+    const playlist = createPlaylist("random", [
+      {
+        musicId: "album/A - one.mp3", characterId: "alice",
+        title: "one", album: "album", addedAt: "2026-10-22T00:00:00.000Z",
+      },
+      {
+        musicId: "album/A - two.mp3", characterId: "alice",
+        title: "two", album: "album", addedAt: "2026-10-22T00:00:00.000Z",
+      },
+    ]);
+    const game = buildPlaylistGameSelection(playlist, data, (tracks) => tracks[1]);
+
+    expect(game.order).toEqual(["alice"]);
+    expect(game.selection.get("alice")).toBe(1);
+  });
+
   it("creates and reuses the default playlist while deduplicating tracks", () => {
     const track = {
       musicId: "album/A - one.mp3", characterId: "alice",
