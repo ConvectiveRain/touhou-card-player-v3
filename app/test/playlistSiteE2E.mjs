@@ -336,6 +336,18 @@ if (storedAfterReload.playlists[0].name !== playlistName) {
   throw new Error("playlist did not survive reload");
 }
 
+await openPlaylistManager();
+await waitFor(`!!document.querySelector('[data-testid="playlist-free-mode"]')`);
+await evaluate(`document.querySelector('[data-testid="playlist-free-mode"]').click()`);
+await waitFor(`localStorage.getItem("card-player-active-playlist-v1") === null`);
+await waitFor(`document.body.innerText.includes("已取消歌单限制，恢复自由播放")`);
+await evaluate(`(() => {
+  const close = [...document.querySelectorAll(".MuiDrawer-paper button")].find(
+    (item) => item.textContent?.trim() === "关闭",
+  );
+  close?.click();
+})()`);
+
 await waitFor(`[...document.querySelectorAll("button")].some(
   (item) => item.textContent?.trim() === "游戏",
 )`);

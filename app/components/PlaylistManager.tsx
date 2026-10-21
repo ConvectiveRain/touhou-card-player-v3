@@ -213,11 +213,25 @@ export default function PlaylistManager(props: PlaylistManagerProps) {
         </Stack>
 
         <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+          <Button
+            data-testid="playlist-free-mode"
+            size="small"
+            variant={activePlaylistId ? "outlined" : "contained"}
+            onClick={() => {
+              props.onSelectPlaylist("");
+              setRequestedPlaylistId("");
+              setPicked(new Set());
+              setStatus("已取消歌单限制，恢复自由播放。");
+            }}
+            sx={{ fontFamily: NoFontFamily, fontSize: "0.76em", textTransform: "none" }}
+          >
+            自由播放（不限制）
+          </Button>
           {props.playlists.map((playlist) => (
             <Button
               key={playlist.id}
               size="small"
-              variant={playlist.id === selectedPlaylistId ? "contained" : "outlined"}
+              variant={playlist.id === activePlaylistId ? "contained" : "outlined"}
               onClick={() => {
                 setRequestedPlaylistId(playlist.id);
                 props.onSelectPlaylist(playlist.id);
