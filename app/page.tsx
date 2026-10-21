@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import PlayerTab from "./components/PlayerTab";
-import { CharacterId } from "./types/Configs";
+import { CharacterId, MusicSelectionMap } from "./types/Configs";
 import { Box, Button, CssBaseline, Divider, Paper, Stack } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { NoFontFamily, theme } from "./components/Theme";
@@ -11,6 +11,7 @@ import ListTab from "./components/ListTab";
 import GameTab from "./components/GameTab";
 import ConfigTab from "./components/ConfigTab";
 import LibraryPicker from "./components/LibraryPicker";
+import PlaylistManager from "./components/PlaylistManager";
 import { GetLocalizedString, Localization } from "./types/Localization";
 import { PagePRNG } from "./types/PagePrng";
 import { useIsSmallScreen } from "./lib/useWindowWidth";
@@ -20,6 +21,10 @@ import { playbackToggleAction } from "./lib/playbackActions";
 import { usePlaybackHotkeys } from "./lib/usePlaybackHotkeys";
 import { getFeatures } from "./lib/features";
 import { resolveJoinLink } from "./lib/joinLink";
+import {
+  buildPlaylistGameSelection, loadPlaylistStore, MusicPlaylist,
+  savePlaylistStore,
+} from "./lib/playlists";
 
 // The tab order used by both the header buttons and the tab container.
 const PlayerTabIndex = 0;
@@ -93,6 +98,14 @@ const AliceCharacterId = "アリス・マーガトロイド";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<number>(0);
+  const [playlistOpen, setPlaylistOpen] = useState(false);
+  const [playlists, setPlaylists] = useState<Array<MusicPlaylist>>([]);
+  const [activePlaylistId, setActivePlaylistId] = useState<string>("");
+  const playlistSnapshotRef = useRef<{
+    musicSelection: MusicSelectionMap;
+    playingOrder: Array<CharacterId>;
+    currentCharacterId: CharacterId;
+  } | null>(null);
 
   const gameData = useGameData();
   const {
@@ -115,7 +128,66 @@ export default function Home() {
     ready,
   });
 
+  useEffect(() => {
+    setPlaylists(loadPlaylistStore().playlists);
+  }, []);
+
+  const updatePlaylists = useCallback((next: Array<MusicPlaylist>) => {
+    setPlaylists(next);
+    savePlaylistStore(next);
+  }, []);
+
+  const restorePlaylistSnapshot = useCallback(() => {
+    const snapshot = playlistSnapshotRef.current;
+    if (!snapshot) { return; }
+    setMusicSelection(snapshot.musicSelection);
+    setPlayingOrder(snapshot.playingOrder);
+    setCurrentCharacterId(snapshot.currentCharacterId);
+    playlistSnapshotRef.current = null;
+  }, [setCurrentCharacterId, setMusicSelection, setPlayingOrder]);
+
+  const chooseGamePlaylist = useCallback((playlistId: string) => {
+    if (playlistId === "") {
+      restorePlaylistSnapshot();
+      setActivePlaylistId("");
+      return;
+    }
+    const playlist = playlists.find((item) => item.id === playlistId);
+    if (!playlist) { return; }
+    if (!playlistSnapshotRef.current) {
+      playlistSnapshotRef.current = {
+        musicSelection: new Map(musicSelection),
+        playingOrder: playingOrder.slice(),
+        currentCharacterId,
+      };
+    }
+    setActivePlaylistId(playlistId);
+  }, [
+    currentCharacterId, musicSelection, playingOrder, playlists, restorePlaylistSnapshot,
+  ]);
+
+  useEffect(() => {
+    if (!ready || !activePlaylistId || player.inGame) { return; }
+    const playlist = playlists.find((item) => item.id === activePlaylistId);
+    if (!playlist) {
+      restorePlaylistSnapshot();
+      setActivePlaylistId("");
+      return;
+    }
+    const game = buildPlaylistGameSelection(playlist, globalData);
+    setMusicSelection(game.selection);
+    setPlayingOrder(game.order);
+    setCurrentCharacterId(game.order[0] ?? "");
+    // The playlist is the source of truth while it is selected; user edits are applied here.
+  }, [
+    ready, activePlaylistId, playlists, globalData, player.inGame,
+    restorePlaylistSnapshot, setCurrentCharacterId, setMusicSelection, setPlayingOrder,
+  ]);
+
   const isOnSmallerScreen = useIsSmallScreen();
+  const activeGamePlaylist = playlists.find(
+    (playlist) => playlist.id === activePlaylistId,
+  ) ?? null;
 
   // `[` / `]` / space drive the transport, but only where the transport is on screen: the
   // Player and List tabs, and never while a match owns the music.
@@ -211,6 +283,13 @@ export default function Home() {
               activeMusicId={player.activeMusicId}
               disabled={player.inGame}
             />
+            <Button
+              size="small"
+              disabled={player.inGame}
+              onClick={() => { setPlaylistOpen(true); }}
+            >
+              我的歌单
+            </Button>
             <Divider orientation="vertical" flexItem />
             <TabButton
               label={GetLocalizedString(Localization.TabNamePlayer)}
@@ -337,6 +416,10 @@ export default function Home() {
                 characterTemporaryDisabled={characterTemporaryDisabled}
                 currentCharacterId={currentCharacterId}
                 playingOrder={playingOrder}
+                playlists={playlists}
+                activePlaylistId={activePlaylistId}
+                activeGamePlaylist={activeGamePlaylist}
+                onChooseGamePlaylist={chooseGamePlaylist}
                 notifyPauseMusic={player.pauseForGame}
                 notifyPlayMusic={player.play}
                 playbackState={player.playbackState}
@@ -359,6 +442,15 @@ export default function Home() {
           </CustomTabs>
         </Stack>
       </Box></main></div>
+      <PlaylistManager
+        open={playlistOpen}
+        onClose={() => { setPlaylistOpen(false); }}
+        data={globalData}
+        disabled={player.inGame}
+        playlists={playlists}
+        onPlaylistsChange={updatePlaylists}
+        onPlayMusicQueue={player.playMusicQueue}
+      />
     </ThemeProvider>
   );
 }

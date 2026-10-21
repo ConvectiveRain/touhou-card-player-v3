@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Slider } from "@mui/material";
+import { Box, MenuItem, Select, Slider, Stack, Typography } from "@mui/material";
 import { memo, useEffect, useRef, useState } from "react";
 import {
   CharacterId, GlobalData, MusicSelectionMap, PlaybackSetting,
@@ -23,6 +23,7 @@ import { PlayerNameOverlay, playerNameExtent } from "./game/PlayerNameOverlay";
 import { buildCardVisuals } from "./game/cardVisuals";
 import { createDragHandlers } from "./game/cardDrag";
 import { useGameSession } from "./game/useGameSession";
+import type { MusicPlaylist } from "../lib/playlists";
 
 export interface GameTabProps {
   data: GlobalData;
@@ -30,6 +31,10 @@ export interface GameTabProps {
   currentCharacterId: CharacterId;
   characterTemporaryDisabled: Map<CharacterId, boolean>;
   playingOrder: Array<CharacterId>;
+  playlists: Array<MusicPlaylist>;
+  activePlaylistId: string;
+  activeGamePlaylist: MusicPlaylist | null;
+  onChooseGamePlaylist: (playlistId: string) => void;
   playbackState: PlaybackState;
   playbackSetting: PlaybackSetting;
   volume: number;
@@ -155,9 +160,58 @@ function GameTab(props: GameTabProps) {
 
   const selfName = judge.players[judge.myPlayerIndex]?.name ?? "";
   const opponentName = judge.players[judge.isServer() ? 1 : 0]?.name ?? "";
+  const activePlaylist = props.activeGamePlaylist;
+  const playlistSelectorDisabled = judge.isClient()
+    || judge.isObserver()
+    || judge.state !== GameJudgeState.SelectingCards;
 
   return (
-    <Box>
+    <Box data-game-state={judge.state}>
+      <Stack
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        justifyContent="flex-end"
+        sx={{ marginBottom: 1 }}
+      >
+        <Typography sx={{ fontSize: "0.78em", color: "text.secondary" }}>
+          本局歌单
+        </Typography>
+        <Box data-testid="game-playlist-control">
+          <Select
+            size="small"
+            value={props.activePlaylistId}
+            disabled={playlistSelectorDisabled}
+            onChange={(event) => { props.onChooseGamePlaylist(event.target.value); }}
+            renderValue={(value) => {
+              if (!value) { return "自由模式（不限制）"; }
+              return activePlaylist?.name ?? "歌单已失效";
+            }}
+            sx={{ minWidth: "13em", fontSize: "0.8em" }}
+          >
+            <MenuItem value="">自由模式（不限制）</MenuItem>
+            {props.playlists.map((playlist) => (
+              <MenuItem
+                key={playlist.id}
+                value={playlist.id}
+                disabled={playlist.tracks.length === 0}
+              >
+                {playlist.name}（{playlist.tracks.length} 首）
+              </MenuItem>
+            ))}
+          </Select>
+        </Box>
+        {activePlaylist && (
+          <Typography sx={{ fontSize: "0.72em", color: "warning.main" }}>
+            对局音频只会来自这份歌单；每位角色使用其中一首
+          </Typography>
+        )}
+        {judge.isClient() && !judge.isObserver() && (
+          <Typography sx={{ fontSize: "0.72em", color: "text.secondary" }}>
+            由房主选择歌单
+          </Typography>
+        )}
+      </Stack>
       <Box
         ref={containerRef}
         sx={{

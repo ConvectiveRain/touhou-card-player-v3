@@ -9,7 +9,7 @@ describe("card image urls", () => {
   });
 
   it("builds local and R2 urls", () => {
-    expect(cardImageUrl("dairi-sd", "alice.png", false)).toBe("./cards/alice.png");
+    expect(cardImageUrl("dairi-sd", "alice.png", false)).toBe("/cards/alice.png");
     expect(cardImageUrl("thbwiki-sd", "alice.png", true)).toBe(
       "https://r2bucket-touhou.hgjertkljw.org/cards-thwiki/alice.png",
     );

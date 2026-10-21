@@ -35,6 +35,8 @@ import type {
 import { useBoardSetting } from "./useBoardSetting";
 import { useUnusedCards } from "./useUnusedCards";
 import type { DragInfo } from "./cardDrag";
+import type { MusicPlaylist } from "../../lib/playlists";
+import { buildPlaylistGameSelection } from "../../lib/playlists";
 
 /**
  * The game session controller: owns the judge, the peer connection, chat, the persisted
@@ -48,6 +50,7 @@ export type GameSessionProps = {
   currentCharacterId: CharacterId;
   characterTemporaryDisabled: Map<CharacterId, boolean>;
   playingOrder: Array<CharacterId>;
+  activeGamePlaylist: MusicPlaylist | null;
   playbackSetting: PlaybackSetting;
   musicStartTimestamp: number;
   notifyGameStart: (order: Array<CharacterId> | null) => Array<CharacterId>;
@@ -139,9 +142,10 @@ export type GameSession = {
 export function useGameSession(props: GameSessionProps): GameSession {
   const {
     data, musicSelection, currentCharacterId, characterTemporaryDisabled, playingOrder,
-    playbackSetting, musicStartTimestamp, notifyGameStart, notifyGameEnd,
+    activeGamePlaylist, playbackSetting, musicStartTimestamp, notifyGameStart, notifyGameEnd,
     notifyPauseMusic, notifyPlayMusic, notifyPlayCountdownAudio, setNextSongPRNGSeed,
     setCurrentCharacterId, setPlayingOrder, setCharacterTemporaryDisabled, setPlaybackSetting,
+    setMusicSelection,
   } = props;
 
   // region state
@@ -685,11 +689,23 @@ export function useGameSession(props: GameSessionProps): GameSession {
   }, [judge, markJudgeChanged, notifyGameEnd, clearBoardInteraction]);
 
   const notifyStartGame = useCallback((order: Array<CharacterId> | null): Array<CharacterId> => {
-    const newPlayingOrder = notifyGameStart(order);
+    let playlistOrder: Array<CharacterId> | null = null;
+    if (activeGamePlaylist) {
+      const game = buildPlaylistGameSelection(activeGamePlaylist, data);
+      playlistOrder = game.order;
+      // This callback runs synchronously from the rules engine before React commits, so update
+      // the mirror used by the multiplayer sync payload as well as the rendered state.
+      outerRef.current.musicSelection = game.selection;
+      setMusicSelection(game.selection);
+    }
+    const newPlayingOrder = notifyGameStart(playlistOrder ?? order);
     notifyPlayCountdownAudio();
     timerTextStartCountdown();
     return newPlayingOrder;
-  }, [notifyGameStart, notifyPlayCountdownAudio, timerTextStartCountdown]);
+  }, [
+    data, notifyGameStart, notifyPlayCountdownAudio, activeGamePlaylist,
+    setMusicSelection, timerTextStartCountdown,
+  ]);
 
   // hand the judge the UI callbacks it needs to drive the board
   // Give the rules engine its UI callbacks through the same post-commit effect the other

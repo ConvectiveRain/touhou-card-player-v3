@@ -23,6 +23,9 @@ A fan-made Touhou card game that you play by ear, bundled with a music player fo
 - **The music player.** Queue characters and reorder, shuffle or reset that order, temporarily
   disable any of them without losing the rest, switch card art or music source, or give one
   character a custom theme. `[`, `]` and `space` drive playback from the Player and List tabs.
+- **Personal playlists.** Create playlists, select tracks in bulk, reorder or remove them, and
+  export/import the playlist store as JSON. A playlist can be selected before a match so every
+  track used by that match comes from the selected playlist.
 - **Nothing to install or host.** The deployed site is a static page: the rules run in the browser,
   matches go peer-to-peer over WebRTC (PeerJS) with one player hosting, and preferences stay in
   localStorage. Card art and music are credited in the Config tab.
@@ -44,6 +47,18 @@ A fan-made Touhou card game that you play by ear, bundled with a music player fo
 - `npm run typecheck` — `tsc --noEmit`.
 - `npm run lint` — ESLint.
 
+## Playlists
+
+Open **我的歌单** from the top bar to create a playlist. Search or scroll through the track list,
+check any number of tracks, and add them to the selected playlist. Playlists are stored in browser
+`localStorage`, so they survive browser and computer restarts on that browser profile. Use
+**导出** / **导入** to move them to another browser or computer.
+
+The **游戏** tab has a **本局歌单** selector. Choosing a playlist limits that match to characters
+and tracks present in the playlist. Because the card game has one card per character, the match
+uses the first playlist track for each represented character; the regular player still queues
+every playlist track in order.
+
 ## Architecture
 
 The app is a pure front end: it fetches its data from `public/`, keeps settings in
@@ -62,6 +77,7 @@ app/
     math.ts                clamp
     format.ts              clock formatting
     persistence.ts         every localStorage key, with validation
+    playlists.ts           playlist schema, localStorage persistence, game selection builder
     features.ts            ?g / ?r2 / ?locale / ?cheatcode feature flags, read once
     joinLink.ts            builds and reads ?code / ?role PvP join links
     playbackActions.ts     transport rules shared by the buttons and the hotkeys

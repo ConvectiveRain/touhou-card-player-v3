@@ -5,7 +5,9 @@ import {
   CharacterId, createPlayingOrder, GlobalData, MusicSelectionMap,
   MusicInfo, MusicUniqueId, PlaybackSetting, PlaybackState,
 } from "../types/Configs";
-import { musicIdFor, musicSourceFor, parseMusicInfo, stepMusicQueueIndex } from "./music";
+import {
+  characterIdForMusic, musicIdFor, musicSourceFor, parseMusicInfo, stepMusicQueueIndex,
+} from "./music";
 import { loadVolume, saveVolume } from "./persistence";
 
 /**
@@ -223,10 +225,25 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     }
   }, [currentCharacterId, globalData, musicSelection]);
 
+  /**
+   * Keep the card display and the playing order in sync with a track that came from an
+   * album queue. Without this, the audio switches tracks while the large character card
+   * remains on the character selected before entering the album.
+   */
+  const syncCharacterForMusic = useCallback((musicId: MusicUniqueId) => {
+    const characterId = characterIdForMusic(globalData, musicId);
+    if (characterId === null) { return; }
+    setCurrentCharacterId(characterId);
+    if (!playingOrder.includes(characterId)) {
+      setPlayingOrder([...playingOrder, characterId]);
+    }
+  }, [globalData, playingOrder, setCurrentCharacterId, setPlayingOrder]);
+
   const playMusicQueue = useCallback((musicIds: Array<MusicUniqueId>, musicId: MusicUniqueId) => {
     const playable = musicIds.filter((id) => globalData.sources.has(id));
     const index = playable.indexOf(musicId);
     if (index < 0) { return; }
+    syncCharacterForMusic(musicId);
     setDirectQueue({ musicIds: playable, index });
     setPlaybackState(PlaybackState.Playing);
     const audio = audioRef.current;
@@ -238,7 +255,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
         }
       });
     }
-  }, [globalData]);
+  }, [globalData, syncCharacterForMusic]);
 
   /** Pauses without marking the track stopped, so a later play resumes where it left off. */
   const pauseForGame = useCallback(() => {
@@ -263,7 +280,9 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
       const nextIndex = stepMusicQueueIndex(
         directQueue.index, directQueue.musicIds.length, direction,
       );
+      const nextMusicId = directQueue.musicIds[nextIndex];
       setDirectQueue({ ...directQueue, index: nextIndex });
+      if (nextMusicId) { syncCharacterForMusic(nextMusicId); }
       if (stateRef.current.playbackSetting.pauseOnSwitch) {
         pause();
       }
@@ -288,7 +307,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     }
   }, [
     directQueue, playingOrder, currentCharacterId, musicSelection, characterTemporaryDisabled,
-    setCurrentCharacterId, pause,
+    setCurrentCharacterId, syncCharacterForMusic, pause,
   ]);
 
   const next = useCallback(() => { stepCharacter(1); }, [stepCharacter]);

@@ -40,6 +40,23 @@ export function musicInfoFor(
   return { characterId, ...parseMusicInfo(musicId) };
 }
 
+/**
+ * The character a track belongs to, as rendered by the player.
+ *
+ * A track can appear in more than one character's list. The card view has room for one
+ * current character, so use the first character in payload order; this matches the index
+ * used by the library picker. Album tracks with no owner return null and leave the current
+ * card unchanged.
+ */
+export function characterIdForMusic(
+  globalData: GlobalData, musicId: MusicUniqueId,
+): CharacterId | null {
+  for (const [characterId, config] of globalData.characterConfigs) {
+    if (config.musics.includes(musicId)) { return characterId; }
+  }
+  return null;
+}
+
 /** Splits a raw music id ("<album>/<index>. <author> - <title>.ext") into title and album. */
 export function parseMusicInfo(musicName: string): { title: string; album: string } {
   const album = musicName.substring(0, musicName.indexOf("/"));

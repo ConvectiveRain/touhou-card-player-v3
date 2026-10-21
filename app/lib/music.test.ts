@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestGlobalData } from "../test/fixtures";
 import {
-  musicIdFor, musicInfoFor, musicSourceFor, parseMusicInfo, stepMusicQueueIndex,
+  characterIdForMusic, musicIdFor, musicInfoFor, musicSourceFor, parseMusicInfo, stepMusicQueueIndex,
 } from "./music";
 import { MusicSelectionMap } from "../types/Configs";
 
@@ -89,5 +89,26 @@ describe("musicInfoFor", () => {
     // a -1 selection used to index musics[-1] and throw
     const { data, selection } = setup();
     expect(musicInfoFor(data, selection, "marisa")).toBeNull();
+  });
+});
+
+describe("characterIdForMusic", () => {
+  it("finds the character card that owns a track", () => {
+    const { data } = setup();
+    expect(characterIdForMusic(data, "Album/ZUN - Title.mp3")).toBe("alice");
+  });
+
+  it("returns null for an unowned track", () => {
+    const { data } = setup();
+    expect(characterIdForMusic(data, "Album/No Character.mp3")).toBeNull();
+  });
+
+  it("uses the first owner when a shared track appears in multiple card lists", () => {
+    const shared = "Album/Shared.mp3";
+    const data = createTestGlobalData({
+      alice: { card: ["alice-1"], music: [shared] },
+      marisa: { card: ["marisa-1"], music: [shared] },
+    });
+    expect(characterIdForMusic(data, shared)).toBe("alice");
   });
 });

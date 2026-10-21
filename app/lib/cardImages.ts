@@ -4,7 +4,9 @@
  */
 
 export const CardR2Prefix = "https://r2bucket-touhou.hgjertkljw.org/";
-export const CardLocalPrefix = "./";
+// next/image only accepts a root-relative path (leading slash) or an absolute URL.
+// `./cards/...` throws "Failed to construct 'URL'" in Next 16.
+export const CardLocalPrefix = "/";
 
 export const CardCollectionPrefix: ReadonlyMap<string, string> = new Map([
   ["dairi-sd", "cards/"],

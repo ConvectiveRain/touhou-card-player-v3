@@ -19,12 +19,15 @@ class PagePRNG {
     if (str === null || str === undefined) {
       return 0;
     }
-    new PagePRNG();
-    let hash = this.seed;
+    // Hashing is used during SSR too. It must not depend on the time-seeded PRNG state,
+    // otherwise the server and client render different text/style values and React reports a
+    // hydration mismatch. FNV-1a gives both sides the same stable value for the same string.
+    let hash = 2166136261;
     for (let i = 0; i < str.length; i++) {
-      hash = (hash * 31 + str.charCodeAt(i)) % 2147483647;
+      hash ^= str.charCodeAt(i);
+      hash = Math.imul(hash, 16777619) >>> 0;
     }
-    return hash;
+    return hash % 2147483647;
   }
 }
 

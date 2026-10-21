@@ -488,6 +488,11 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                         const albumMusicIds = props.scope === "single"
                           ? (albumTracks.get(albumBrowse.album.id) ?? [])
                           : albumBrowse.album.music;
+                        // Keep the album list open on the clicked track's character. The
+                        // player updates currentCharacterId from the queue track itself.
+                        if (track.characterId) {
+                          setBrowsedAlbum({ album: albumBrowse.album, anchor: track.characterId });
+                        }
                         props.onPlayMusicQueue(albumMusicIds, track.musicId);
                       } else if (track.characterId && track.index >= 0) {
                         playTrack(track.characterId, track.index);
@@ -587,7 +592,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                 >
                   {album.cover && (
                     <Image
-                      src={`covers_local/${album.id}.jpg`}
+                      src={`/covers_local/${album.id}.jpg`}
                       alt={album.name}
                       width={34}
                       height={34}
