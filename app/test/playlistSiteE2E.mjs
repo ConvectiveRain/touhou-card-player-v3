@@ -143,6 +143,7 @@ await evaluate(`(() => {
   button.click();
 })()`);
 await waitFor(`document.body.innerText.includes(${JSON.stringify(playlistName)})`);
+await waitFor(`document.querySelectorAll('.MuiDrawer-paper input[type="checkbox"]').length >= 2`);
 
 await evaluate(`(() => {
   const boxes = [...document.querySelectorAll('.MuiDrawer-paper input[type="checkbox"]')];
@@ -335,8 +336,15 @@ if (storedAfterReload.playlists[0].name !== playlistName) {
   throw new Error("playlist did not survive reload");
 }
 
+await waitFor(`[...document.querySelectorAll("button")].some(
+  (item) => item.textContent?.trim() === "游戏",
+)`);
+await sleep(300);
 await evaluate(`(() => {
-  const button = [...document.querySelectorAll("button")].find((item) => item.textContent?.trim() === "游戏");
+  const button = [...document.querySelectorAll("button")].find(
+    (item) => item.textContent?.trim() === "游戏",
+  );
+  if (!button) { throw new Error("game tab button missing"); }
   button.click();
 })()`);
 await waitFor(`document.body.innerText.includes("本局歌单")`);
