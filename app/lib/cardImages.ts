@@ -4,9 +4,21 @@
  */
 
 export const CardR2Prefix = "https://r2bucket-touhou.hgjertkljw.org/";
-// next/image only accepts a root-relative path (leading slash) or an absolute URL.
-// `./cards/...` throws "Failed to construct 'URL'" in Next 16.
-export const CardLocalPrefix = "/";
+const RouterBasePath = (process.env.__NEXT_ROUTER_BASEPATH ?? "").replace(/\/+$/, "");
+
+export function withBasePath(basePath: string, assetPath: string): string {
+  const normalizedPath = assetPath.replace(/^\.?\//, "").replace(/^\/+/, "");
+  const normalizedBase = basePath.replace(/\/+$/, "");
+  return `${normalizedBase}/${normalizedPath}`;
+}
+
+export function localAssetUrl(assetPath: string): string {
+  return withBasePath(RouterBasePath, assetPath);
+}
+
+// next/image accepts a root-relative path; include the Pages project base path when deployed
+// under a subdirectory (for example `/touhou-card-player-v3/`).
+export const CardLocalPrefix = withBasePath(RouterBasePath, "");
 
 export const CardCollectionPrefix: ReadonlyMap<string, string> = new Map([
   ["dairi-sd", "cards/"],

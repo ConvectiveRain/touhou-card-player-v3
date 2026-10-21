@@ -7,7 +7,7 @@ import {
 } from "@mui/material";
 import Image from "next/image";
 import { GlobalData, MusicSelectionMap } from "../types/Configs";
-import { cardImageUrl } from "../lib/cardImages";
+import { cardImageUrl, localAssetUrl } from "../lib/cardImages";
 import { parseMusicInfo } from "../lib/music";
 import { getFeatures } from "../lib/features";
 import { fetchJson } from "../lib/fetchJson";
@@ -592,7 +592,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                 >
                   {album.cover && (
                     <Image
-                      src={`/covers_local/${album.id}.jpg`}
+                      src={localAssetUrl(`covers_local/${album.id}.jpg`)}
                       alt={album.name}
                       width={34}
                       height={34}
