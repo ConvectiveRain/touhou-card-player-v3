@@ -22,4 +22,10 @@
 * Bugfix: local card and album image paths now start with `/`, fixing Next 16 `Failed to construct 'URL': Invalid URL` errors from `next/image`.
 * Music data: added 822 album-matched tracks whose NetEase titles contain Chinese/Japanese spelling variants or appended original-song notes; direct audio URLs were re-probed before insertion.
 
+## 2026-10-24
+* Music data: added 23 requested circles, 849 albums and 8,416 tracks verified against NetEase album metadata and direct audio playback.
+* Music data: fixed `森羅万象 - ノンフィク陰謀論` from one track to its complete seven-track album.
+* Bugfix: "Random Start" reused the same game-sync seed for every track, so tracks always started at the same relative position. Seeds are now consumed once and regenerated.
+* Bugfix: rapid track changes no longer surface an unhandled `AbortError` when the previous `play()` request is interrupted.
+
 ## TODO

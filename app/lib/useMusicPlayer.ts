@@ -9,14 +9,18 @@ import {
   characterIdForMusic, musicIdFor, musicSourceFor, parseMusicInfo, stepMusicQueueIndex,
 } from "./music";
 import { loadVolume, saveVolume } from "./persistence";
+import { RandomSeedMax, takeRandomStartSeed } from "./randomStart";
+
+function reportPlaybackError(error: unknown): void {
+  if ((error as { name?: string })?.name === "AbortError") { return; }
+  console.log("Playback was blocked:", error);
+}
 
 /**
  * The audio engine: one <audio> for the soundtrack plus one for the countdown bell, the
  * transport controls the Player/List tabs drive, and the hooks GameTab calls when a match
  * starts or ends. Extracted from the page component so it no longer mixes with routing.
  */
-
-const PRNG_MAX = 2147483647;
 
 export type MusicPlayerOptions = {
   globalData: GlobalData;
@@ -130,12 +134,9 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     nextSongPRNGSeedRef.current = seed;
   }, []);
 
-  /** Draws a fresh seed the first time one is needed. */
+  /** Uses a queued game seed once, then draws a fresh seed for the next track. */
   const takeNextSongPRNGSeed = useCallback((): number => {
-    if (nextSongPRNGSeedRef.current === null) {
-      nextSongPRNGSeedRef.current = Math.floor(Math.random() * PRNG_MAX);
-    }
-    return nextSongPRNGSeedRef.current;
+    return takeRandomStartSeed(nextSongPRNGSeedRef);
   }, []);
 
   // region music lookup
@@ -182,7 +183,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
       console.log("Audio duration is not available yet.");
       return;
     }
-    const random01 = takeNextSongPRNGSeed() / PRNG_MAX;
+    const random01 = takeNextSongPRNGSeed() / RandomSeedMax;
     const randomPosition = trackDuration < 10 ? 0 : random01 * (trackDuration - 10);
     // The element owns the position now; the clock follows the resulting seek.
     audio.currentTime = randomPosition;
@@ -195,7 +196,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   }, []);
 
   const play = useCallback(() => {
-    audioRef.current?.play();
+    audioRef.current?.play().catch(reportPlaybackError);
     setPlaybackState(PlaybackState.Playing);
   }, []);
 
@@ -369,12 +370,14 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     for (let i = 0; i < ranges.length; i++) {
       playedDuration += ranges.end(i) - ranges.start(i);
     }
-    audio.play().then(() => {
-      if (playedDuration < 0.02) {
-        console.log("CountdownEnd: Music started at ", Date.now());
-        setMusicStartTimestamp(Date.now());
-      }
-    });
+    audio.play()
+      .then(() => {
+        if (playedDuration < 0.02) {
+          console.log("CountdownEnd: Music started at ", Date.now());
+          setMusicStartTimestamp(Date.now());
+        }
+      })
+      .catch(reportPlaybackError);
     resetPauseTimeout();
     setPlaybackState(PlaybackState.Playing);
   }, [resetPauseTimeout, setRandomPlaybackPosition]);
@@ -396,10 +399,12 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     if (setting.randomStartPosition) {
       setRandomPlaybackPosition();
     }
-    audio.play().then(() => {
-      console.log("Audio loaded: Music started at ", Date.now());
-      setMusicStartTimestamp(Date.now());
-    });
+    audio.play()
+      .then(() => {
+        console.log("Audio loaded: Music started at ", Date.now());
+        setMusicStartTimestamp(Date.now());
+      })
+      .catch(reportPlaybackError);
     resetPauseTimeout();
     setPlaybackState(PlaybackState.Playing);
   }, [resetPauseTimeout, setRandomPlaybackPosition]);
