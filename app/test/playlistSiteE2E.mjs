@@ -273,24 +273,62 @@ if (libraryActions.rows === 0 || libraryActions.withTwoButtons !== libraryAction
   throw new Error(`track drawer is missing playlist actions: ${JSON.stringify(libraryActions)}`);
 }
 
-const restrictionState = await evaluate(`(() => {
-  const store = JSON.parse(localStorage.getItem("card-player-playlists-v1"));
-  const playlist = store.playlists.find((item) => item.name === ${JSON.stringify(playlistName)});
-  const allowed = new Set(playlist.tracks.map((track) => track.musicId));
-  const blocked = [...document.querySelectorAll('[data-testid="library-track-row"]')]
-    .find((row) => !allowed.has(row.dataset.musicId));
-  if (!blocked) { throw new Error("no out-of-playlist track to test"); }
-  const before = localStorage.getItem("musicSelection");
-  blocked.click();
-  return { before, blockedId: blocked.dataset.musicId, allowed: [...allowed] };
-})()`);
-await sleep(700);
-const selectionAfterBlockedClick = await evaluate(`localStorage.getItem("musicSelection")`);
-if (selectionAfterBlockedClick !== restrictionState.before) {
-  throw new Error(`out-of-playlist track changed selection: ${JSON.stringify({
-    restrictionState, selectionAfterBlockedClick,
-  })}`);
+const playlistLibrary = await fetch(`${base}/library_local.json`).then((response) => response.json());
+const circleMusicIds = new Set(
+  playlistLibrary.albums.flatMap((album) => album.music),
+);
+const visibleTrackState = await evaluate(`(() => ({
+  rows: [...document.querySelectorAll('[data-testid="library-track-row"]')].map(
+    (row) => row.dataset.musicId,
+  ),
+  playlistIds: JSON.parse(localStorage.getItem("card-player-playlists-v1"))
+    .playlists.find((item) => item.name === ${JSON.stringify(playlistName)})
+    .tracks.map((track) => track.musicId),
+  order: JSON.parse(localStorage.getItem("playingOrder")),
+}))()`);
+if (visibleTrackState.order.length !== 1) {
+  throw new Error(`expected one playlist character before track filtering: ${JSON.stringify(visibleTrackState)}`);
 }
+const filteredCharacterId = visibleTrackState.order[0];
+const filteredCharacterData = await fetch(`${base}/character.json`).then((response) => response.json());
+const filteredCharacterMusic = filteredCharacterData[filteredCharacterId]?.music;
+const filteredCharacterMusicIds = Array.isArray(filteredCharacterMusic)
+  ? filteredCharacterMusic : [filteredCharacterMusic];
+const localMusicSources = await fetch(`${base}/sources_local.json`).then((response) => response.json());
+const playlistAllowedIds = new Set(visibleTrackState.playlistIds);
+const leakedCircleTracks = visibleTrackState.rows.filter((musicId) =>
+  circleMusicIds.has(musicId) && !playlistAllowedIds.has(musicId));
+if (leakedCircleTracks.length) {
+  throw new Error(`non-playlist circle tracks are still visible: ${JSON.stringify(leakedCircleTracks)}`);
+}
+const visibleOriginalIds = visibleTrackState.rows.filter((musicId) => !circleMusicIds.has(musicId));
+if (visibleOriginalIds.length === 0) {
+  throw new Error(`no original tracks are visible: ${JSON.stringify(visibleTrackState.rows)}`);
+}
+const clickedOriginalId = visibleOriginalIds[0];
+const originalIndex = filteredCharacterMusicIds.indexOf(clickedOriginalId);
+if (originalIndex < 0) {
+  throw new Error(`original track has no character index: ${clickedOriginalId}`);
+}
+const clickedOriginalSource = localMusicSources[clickedOriginalId];
+if (!clickedOriginalSource) {
+  throw new Error(`original track has no playable source: ${clickedOriginalId}`);
+}
+await evaluate(`(() => {
+  const row = [...document.querySelectorAll('[data-testid="library-track-row"]')]
+    .find((item) => item.dataset.musicId === ${JSON.stringify(clickedOriginalId)});
+  if (!row) { throw new Error("original track row disappeared"); }
+  row.click();
+})()`);
+await waitFor(`(() => {
+  const selection = JSON.parse(localStorage.getItem("musicSelection"));
+  return selection[${JSON.stringify(filteredCharacterId)}] === ${originalIndex};
+})()`);
+await waitFor(`(() => {
+  const audio = document.querySelector("#audio-element");
+  return audio && audio.getAttribute("src") === ${JSON.stringify(clickedOriginalSource)}
+    && audio.currentTime > 0;
+})()`, 45000);
 
 const randomContext = await evaluate(`(() => {
   const store = JSON.parse(localStorage.getItem("card-player-playlists-v1"));

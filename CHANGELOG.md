@@ -25,6 +25,7 @@
 ## 2026-10-24
 * Music data: added 23 requested circles, 849 albums and 8,416 tracks verified against NetEase album metadata and direct audio playback.
 * Music data: fixed `森羅万象 - ノンフィク陰謀論` from one track to its complete seven-track album.
+* Playlists: when a playlist is active, the track drawer and album track lists now show only playlist tracks plus legacy originals with no circle attribution. Other circles' tracks are hidden, and those originals remain directly playable.
 * Bugfix: "Random Start" reused the same game-sync seed for every track, so tracks always started at the same relative position. Seeds are now consumed once and regenerated.
 * Bugfix: rapid track changes no longer surface an unhandled `AbortError` when the previous `play()` request is interrupted.
 

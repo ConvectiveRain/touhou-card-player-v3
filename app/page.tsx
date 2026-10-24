@@ -22,7 +22,9 @@ import { useMusicPlayer } from "./lib/useMusicPlayer";
 import { playbackToggleAction } from "./lib/playbackActions";
 import { usePlaybackHotkeys } from "./lib/usePlaybackHotkeys";
 import { getFeatures } from "./lib/features";
+import { fetchJson } from "./lib/fetchJson";
 import { resolveJoinLink } from "./lib/joinLink";
+import { collectOriginalMusicIds, LibraryData } from "./lib/library";
 import {
   buildPlaylistGameSelection, groupPlaylistTracksByCharacter, loadActivePlaylistId,
   loadPlaylistStore, MusicPlaylist, saveActivePlaylistId, savePlaylistStore,
@@ -107,6 +109,7 @@ export default function Home() {
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [playlists, setPlaylists] = useState<Array<MusicPlaylist>>([]);
   const [activePlaylistId, setActivePlaylistId] = useState<string>("");
+  const [library, setLibrary] = useState<LibraryData | null>(null);
   const pendingPlayPlaylistRef = useRef<string>("");
   const playlistSnapshotRef = useRef<{
     musicSelection: MusicSelectionMap;
@@ -126,7 +129,7 @@ export default function Home() {
   const activeGamePlaylist = playlists.find(
     (playlist) => playlist.id === activePlaylistId,
   ) ?? null;
-  const activePlaylistMusicIds = useMemo<ReadonlySet<MusicUniqueId> | null>(() => {
+  const activePlaylistTrackMusicIds = useMemo<ReadonlySet<MusicUniqueId> | null>(() => {
     if (!activeGamePlaylist) { return null; }
     return new Set(
       activeGamePlaylist.tracks
@@ -134,6 +137,14 @@ export default function Home() {
         .filter((musicId) => globalData.sources.has(musicId)),
     );
   }, [activeGamePlaylist, globalData]);
+  const originalMusicIds = useMemo(
+    () => collectOriginalMusicIds(library, globalData.sources.keys()),
+    [library, globalData.sources],
+  );
+  const activePlaylistAllowedMusicIds = useMemo<ReadonlySet<MusicUniqueId> | null>(() => {
+    if (!activePlaylistTrackMusicIds) { return null; }
+    return new Set([...activePlaylistTrackMusicIds, ...originalMusicIds]);
+  }, [activePlaylistTrackMusicIds, originalMusicIds]);
   const activePlaylistTracksByCharacter = useMemo<
     ReadonlyMap<CharacterId, Array<MusicUniqueId>> | null
   >(() => {
@@ -158,7 +169,7 @@ export default function Home() {
     setPlayingOrder,
     setCharacterTemporaryDisabled,
     ready,
-    allowedMusicIds: activePlaylistMusicIds,
+    allowedMusicIds: activePlaylistAllowedMusicIds,
     playlistTracksByCharacter: activePlaylistTracksByCharacter,
   });
   const {
@@ -171,6 +182,18 @@ export default function Home() {
     const storedPlaylists = loadPlaylistStore().playlists;
     setPlaylists(storedPlaylists);
     setActivePlaylistId(loadActivePlaylistId(storedPlaylists));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchJson("library_local.json")
+      .then((json) => {
+        if (!cancelled) { setLibrary(json as LibraryData); }
+      })
+      .catch((error) => {
+        if (!cancelled) { console.error("Failed to load library metadata", error); }
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const updatePlaylists = useCallback((next: Array<MusicPlaylist>) => {
@@ -339,6 +362,7 @@ export default function Home() {
             }}
           >
             <LibraryPicker
+              library={library}
               data={globalData}
               musicSelection={musicSelection}
               currentCharacterId={currentCharacterId as CharacterId}
@@ -353,7 +377,7 @@ export default function Home() {
               activeMusicId={player.activeMusicId}
               playlists={playlists}
               activePlaylistId={activePlaylistId}
-              activePlaylistMusicIds={activePlaylistMusicIds}
+              activePlaylistAllowedMusicIds={activePlaylistAllowedMusicIds}
               onPlaylistsChange={updatePlaylists}
               disabled={player.inGame}
             />

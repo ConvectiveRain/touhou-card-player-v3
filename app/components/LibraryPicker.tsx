@@ -10,7 +10,7 @@ import { GlobalData, MusicSelectionMap } from "../types/Configs";
 import { cardImageUrl, localAssetUrl } from "../lib/cardImages";
 import { parseMusicInfo } from "../lib/music";
 import { getFeatures } from "../lib/features";
-import { fetchJson } from "../lib/fetchJson";
+import { LibraryAlbum, LibraryData } from "../lib/library";
 import { MusicScope } from "../lib/originalScope";
 import type { MusicPlaylist } from "../lib/playlists";
 import { NoFontFamily, theme } from "./Theme";
@@ -23,22 +23,6 @@ import PlaylistTrackActions from "./PlaylistTrackActions";
  * 角色本身仍用 GlobalData.characterConfigs，所以卡片、曲目列表与播放引擎共用同一套数据。
  */
 
-type LibraryAlbum = {
-  id: string;
-  name: string;
-  circle: string;
-  producers?: string[];
-  date: string;
-  cover?: boolean;
-  music: string[];
-};
-
-type LibraryData = {
-  circles: string[];
-  albums: LibraryAlbum[];
-  characterCircles: Record<string, string[]>;
-};
-
 /** 社团多选里的「全部社团」哨兵项；它只出现在下拉里，不会进 state——空数组就代表不筛社团。 */
 const AllCircles = "__all_circles__";
 const AllCirclesLabel = "全部社团";
@@ -48,6 +32,7 @@ const CardHeight = Math.round(CardWidth / (703 / 1000));
 const DrawerWidth = 400;
 
 export interface LibraryPickerProps {
+  library: LibraryData | null;
   data: GlobalData;
   musicSelection: MusicSelectionMap;
   currentCharacterId: string;
@@ -66,7 +51,8 @@ export interface LibraryPickerProps {
   activeMusicId: string | null;
   playlists: Array<MusicPlaylist>;
   activePlaylistId: string;
-  activePlaylistMusicIds?: ReadonlySet<string> | null;
+  /** Playlist tracks plus original/upstream tracks that have no circle attribution. */
+  activePlaylistAllowedMusicIds?: ReadonlySet<string> | null;
   onPlaylistsChange: (playlists: Array<MusicPlaylist>) => void;
   disabled?: boolean;
 }
@@ -78,7 +64,7 @@ export interface LibraryPickerProps {
 type AlbumBrowse = { album: LibraryAlbum; anchor: string };
 
 export default function LibraryPicker(props: LibraryPickerProps) {
-  const [library, setLibrary] = useState<LibraryData | null>(null);
+  const { library } = props;
   /** 勾选的社团；空数组 = 全部社团（不筛）。 */
   const [circles, setCircles] = useState<Array<string>>([]);
   const [topPanel, setTopPanel] = useState<"characters" | "albums">("characters");
@@ -87,14 +73,6 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   const [trackQuery, setTrackQuery] = useState("");
   const [browsedAlbum, setBrowsedAlbum] = useState<AlbumBrowse | null>(null);
   const [playlistActionStatus, setPlaylistActionStatus] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchJson("library_local.json")
-      .then((json) => { if (!cancelled) { setLibrary(json as LibraryData); } })
-      .catch(() => { if (!cancelled) { setLibrary(null); } });
-    return () => { cancelled = true; };
-  }, []);
 
   // 宽屏打开面板时给 body 留出右边距，让面板与内容并排而不是压在内容上
   useEffect(() => {
@@ -140,6 +118,15 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     const circle = circleOfMusic.get(musicId);
     return circle === undefined || circles.includes(circle);
   }, [circles, circleOfMusic]);
+
+  /**
+   * Playlist mode keeps two groups: playlist members and circle-less originals/upstream
+   * tracks. Any track that belongs to a circle but not the playlist is omitted entirely.
+   */
+  const inPlaylistOrOriginal = useCallback((musicId: string): boolean => (
+    !props.activePlaylistAllowedMusicIds
+    || props.activePlaylistAllowedMusicIds.has(musicId)
+  ), [props.activePlaylistAllowedMusicIds]);
 
   // 曲目索引：直接从角色配置里展开（曲目 ID 里就带着专辑和曲名）
   const allTracks = useMemo(() => {
@@ -203,10 +190,11 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   const albumTracks = useMemo(() => {
     const map = new Map<string, string[]>();
     (library?.albums ?? []).forEach((album) => {
-      map.set(album.id, album.music.filter((musicId) => characterOfMusic.has(musicId)));
+      map.set(album.id, album.music.filter((musicId) =>
+        characterOfMusic.has(musicId) && inPlaylistOrOriginal(musicId)));
     });
     return map;
-  }, [library, characterOfMusic]);
+  }, [library, characterOfMusic, inPlaylistOrOriginal]);
 
   const albums = useMemo(() => {
     if (!library) { return []; }
@@ -215,10 +203,15 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       if (circles.length > 0 && !circles.includes(album.circle)) { return false; }
       // 单原曲模式下把整张都出局的专辑藏起来（和本地播放器一致）
       if (props.scope === "single" && (albumTracks.get(album.id)?.length ?? 0) === 0) { return false; }
+      if (props.activePlaylistAllowedMusicIds
+        && (albumTracks.get(album.id)?.length ?? 0) === 0) { return false; }
       if (!keyword) { return true; }
       return album.name.toLowerCase().includes(lowered) || album.circle.toLowerCase().includes(lowered);
     });
-  }, [library, circles, keyword, albumTracks, props.scope]);
+  }, [
+    library, circles, keyword, albumTracks, props.scope,
+    props.activePlaylistAllowedMusicIds,
+  ]);
 
   // 点角色卡：不在队列里就加进去，然后切到它
   const pickCharacter = (characterId: string) => {
@@ -234,9 +227,9 @@ export default function LibraryPicker(props: LibraryPickerProps) {
   const pickAlbum = (album: LibraryAlbum) => {
     const selection = new Map(props.musicSelection);
     const order = [...props.playingOrder];
-    const albumMusicIds = props.scope === "single"
+    const albumMusicIds = (props.scope === "single"
       ? (albumTracks.get(album.id) ?? [])
-      : album.music;
+      : album.music).filter(inPlaylistOrOriginal);
     let first: string | null = null;
     albumMusicIds.forEach((musicId) => {
       const characterId = characterOfMusic.get(musicId);
@@ -295,7 +288,10 @@ export default function LibraryPicker(props: LibraryPickerProps) {
     const query = trackQuery.trim().toLowerCase();
     if (query) {
       return allTracks
-        .filter((track) => track.haystack.includes(query) && inCircles(track.musicId))
+        .filter((track) =>
+          track.haystack.includes(query)
+          && inCircles(track.musicId)
+          && inPlaylistOrOriginal(track.musicId))
         .slice(0, 300);
     }
     if (albumBrowse) {
@@ -304,7 +300,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
         ? (albumTracks.get(albumBrowse.album.id) ?? [])
         : albumBrowse.album.music;
       for (const musicId of albumMusicIds) {
-        if (!inCircles(musicId)) { continue; }
+        if (!inCircles(musicId) || !inPlaylistOrOriginal(musicId)) { continue; }
         const characterId = characterOfMusic.get(musicId);
         const config = characterId ? props.data.characterConfigs.get(characterId) : undefined;
         const index = config ? config.musics.indexOf(musicId) : -1;
@@ -318,17 +314,24 @@ export default function LibraryPicker(props: LibraryPickerProps) {
       return list.slice(0, 300);
     }
     return allTracks
-      .filter((track) => track.characterId === props.currentCharacterId && inCircles(track.musicId))
+      .filter((track) =>
+        track.characterId === props.currentCharacterId
+        && inCircles(track.musicId)
+        && inPlaylistOrOriginal(track.musicId))
       .slice(0, 300);
-  }, [allTracks, trackQuery, albumBrowse, albumTracks, characterOfMusic, props.data, props.currentCharacterId, props.scope, inCircles]);
+  }, [
+    allTracks, trackQuery, albumBrowse, albumTracks, characterOfMusic, props.data,
+    props.currentCharacterId, props.scope, inCircles, inPlaylistOrOriginal,
+  ]);
 
   // 列表上面那行小字：现在看的是谁 / 哪张专辑
   const circleHint = circles.length === 0 ? "" : "，已按社团筛选";
+  const playlistHint = props.activePlaylistAllowedMusicIds ? "，仅歌单与原曲" : "";
   const listCaption = trackQuery
-    ? `${shownTracks.length} 首（最多列 300）${circleHint}`
+    ? `${shownTracks.length} 首（最多列 300）${circleHint}${playlistHint}`
     : albumBrowse
-      ? `专辑：${albumBrowse.album.name}（${shownTracks.length} 首${circleHint}）`
-      : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首${circleHint}）`;
+      ? `专辑：${albumBrowse.album.name}（${shownTracks.length} 首${circleHint}${playlistHint}）`
+      : `当前角色：${props.currentCharacterId || "—"}（${shownTracks.length} 首${circleHint}${playlistHint}）`;
 
   if (!library) { return null; }
 
@@ -486,8 +489,6 @@ export default function LibraryPicker(props: LibraryPickerProps) {
               )}
               {shownTracks.map((track) => {
                 const active = props.activeMusicId === track.musicId;
-                const playlistBlocked = !!props.activePlaylistMusicIds
-                  && !props.activePlaylistMusicIds.has(track.musicId);
                 const playlistTrack = {
                   musicId: track.musicId,
                   characterId: track.characterId ?? "",
@@ -500,19 +501,18 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                     key={`${track.characterId}-${track.musicId}`}
                     data-testid="library-track-row"
                     data-music-id={track.musicId}
-                    title={playlistBlocked ? "这首歌不在当前选定歌单中，不能播放" : undefined}
                     onClick={() => {
-                      if (props.disabled || playlistBlocked) { return; }
+                      if (props.disabled) { return; }
                       if (albumBrowse) {
-                        const albumMusicIds = props.scope === "single"
+                        const albumMusicIds = (props.scope === "single"
                           ? (albumTracks.get(albumBrowse.album.id) ?? [])
-                          : albumBrowse.album.music;
+                          : albumBrowse.album.music).filter(inPlaylistOrOriginal);
                         // Keep the album list open on the clicked track's character. The
                         // player updates currentCharacterId from the queue track itself.
                         if (track.characterId) {
                           setBrowsedAlbum({ album: albumBrowse.album, anchor: track.characterId });
                         }
-                        if (props.activePlaylistMusicIds && track.characterId && track.index >= 0) {
+                        if (props.activePlaylistAllowedMusicIds && track.characterId && track.index >= 0) {
                           playTrack(track.characterId, track.index);
                         } else {
                           props.onPlayMusicQueue(albumMusicIds, track.musicId);
@@ -523,8 +523,7 @@ export default function LibraryPicker(props: LibraryPickerProps) {
                     }}
                     sx={{
                       display: "flex", alignItems: "center", gap: 1, padding: "3px 6px",
-                      cursor: props.disabled || playlistBlocked ? "default" : "pointer",
-                      opacity: playlistBlocked ? 0.42 : 1,
+                      cursor: props.disabled ? "default" : "pointer",
                       borderRadius: 1,
                       backgroundColor: active ? "rgba(193,72,72,0.35)" : "transparent",
                       "&:hover": { backgroundColor: "rgba(255,255,255,0.08)" },
