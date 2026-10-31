@@ -25,6 +25,7 @@ import { getFeatures } from "./lib/features";
 import { fetchJson } from "./lib/fetchJson";
 import { resolveJoinLink } from "./lib/joinLink";
 import { collectOriginalMusicIds, LibraryData } from "./lib/library";
+import { AudioBoostLabels } from "./lib/audioBoost";
 import {
   buildPlaylistGameSelection, groupPlaylistTracksByCharacter, loadActivePlaylistId,
   loadPlaylistStore, MusicPlaylist, saveActivePlaylistId, savePlaylistStore,
@@ -338,6 +339,7 @@ export default function Home() {
         <audio
           id="audio-element"
           ref={player.audioRef}
+          crossOrigin="anonymous"
           onLoadedData={player.audioElementProps.onLoadedData}
           onLoadedMetadata={player.audioElementProps.onLoadedMetadata}
         ></audio>
@@ -387,6 +389,15 @@ export default function Home() {
               onClick={() => { setPlaylistOpen(true); }}
             >
               我的歌单
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              color={player.audioBoostMode === "extreme" ? "error" : "primary"}
+              title="切换网站音乐响度：极限（可能破音）/ 增强 / 原声"
+              onClick={player.cycleAudioBoostMode}
+            >
+              音效：{AudioBoostLabels[player.audioBoostMode]}
             </Button>
             <Divider orientation="vertical" flexItem />
             <TabButton

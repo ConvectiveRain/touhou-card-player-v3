@@ -10,6 +10,10 @@ import {
 } from "./music";
 import { loadVolume, saveVolume } from "./persistence";
 import { RandomSeedMax, takeRandomStartSeed } from "./randomStart";
+import {
+  AudioBoostMode, loadAudioBoostMode, nextAudioBoostMode, proxiedAudioUrl, saveAudioBoostMode,
+} from "./audioBoost";
+import { useAudioBoost } from "./useAudioBoost";
 
 function reportPlaybackError(error: unknown): void {
   if ((error as { name?: string })?.name === "AbortError") { return; }
@@ -58,6 +62,8 @@ export type MusicPlayerStore = {
   setPlaybackSetting: (setting: PlaybackSetting) => void;
   volume: number;
   setVolume: (volume: number) => void;
+  audioBoostMode: AudioBoostMode;
+  cycleAudioBoostMode: () => void;
   musicStartTimestamp: number;
   setNextSongPRNGSeed: (seed: number) => void;
   inGame: boolean;
@@ -107,6 +113,8 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     countdown: false, randomStartPosition: false, playbackDuration: 0, pauseOnSwitch: false,
   });
   const [volume, setVolumeState] = useState<number>(() => loadVolume());
+  const [audioBoostMode, setAudioBoostModeState] = useState<AudioBoostMode>(() => loadAudioBoostMode());
+  const primeAudioBoost = useAudioBoost(audioRef, audioBoostMode);
   const [musicStartTimestamp, setMusicStartTimestamp] = useState<number>(0);
   const [inGame, setInGame] = useState<boolean>(false);
   const [directQueue, setDirectQueue] = useState<{
@@ -130,6 +138,14 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     saveVolume(newVolume);
   }, []);
 
+  const cycleAudioBoostMode = useCallback(() => {
+    setAudioBoostModeState((current) => {
+      const next = nextAudioBoostMode(current);
+      saveAudioBoostMode(next);
+      return next;
+    });
+  }, []);
+
   const setNextSongPRNGSeed = useCallback((seed: number) => {
     nextSongPRNGSeedRef.current = seed;
   }, []);
@@ -142,13 +158,16 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   // region music lookup
 
   const getMusicSourceUrl = useCallback((character: CharacterId): string | null => {
+    let sourceUrl: string | null = null;
     if (directQueue) {
       const musicId = directQueue.musicIds[directQueue.index];
-      return musicId && musicAllowed(musicId) ? globalData.sources.get(musicId) || null : null;
+      sourceUrl = musicId && musicAllowed(musicId) ? globalData.sources.get(musicId) || null : null;
+    } else {
+      const musicId = musicIdFor(globalData, musicSelection, character);
+      if (!musicId || !musicAllowed(musicId)) { return null; }
+      sourceUrl = musicSourceFor(globalData, musicSelection, character);
     }
-    const musicId = musicIdFor(globalData, musicSelection, character);
-    if (!musicId || !musicAllowed(musicId)) { return null; }
-    return musicSourceFor(globalData, musicSelection, character);
+    return sourceUrl ? proxiedAudioUrl(sourceUrl, window.location.origin) : null;
   }, [directQueue, globalData, musicAllowed, musicSelection]);
 
   // region transport
@@ -196,9 +215,10 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
   }, []);
 
   const play = useCallback(() => {
+    primeAudioBoost();
     audioRef.current?.play().catch(reportPlaybackError);
     setPlaybackState(PlaybackState.Playing);
-  }, []);
+  }, [primeAudioBoost]);
 
   const pause = useCallback(() => {
     clearPauseTimeout();
@@ -226,11 +246,13 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
       ? null
       : musicIdFor(globalData, musicSelection, currentCharacterId);
     if (!musicId || !musicAllowed(musicId)) { return; }
-    const sourceUrl = globalData.sources.get(musicId) ?? null;
-    if (!sourceUrl) { return; }
+    const rawSourceUrl = globalData.sources.get(musicId) ?? null;
+    if (!rawSourceUrl) { return; }
+    const sourceUrl = proxiedAudioUrl(rawSourceUrl, window.location.origin);
     setPlaybackState(PlaybackState.Playing);
     const audio = audioRef.current;
     if (audio && sourceUrl !== null && audio.getAttribute("src") === sourceUrl) {
+      primeAudioBoost();
       audio.play().catch((error: unknown) => {
         // 点卡片时若同时换了曲目，这一次 play() 会被新的加载请求打断（AbortError），属预期；
         // 新曲目会在 loadeddata 时开始，这里只报真正的失败原因（例如浏览器拦截自动播放）。
@@ -239,7 +261,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
         }
       });
     }
-  }, [currentCharacterId, globalData, musicAllowed, musicSelection]);
+  }, [currentCharacterId, globalData, musicAllowed, musicSelection, primeAudioBoost]);
 
   /**
    * Keep the card display and the playing order in sync with a track that came from an
@@ -283,15 +305,19 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     setDirectQueue({ musicIds: playable, index });
     setPlaybackState(PlaybackState.Playing);
     const audio = audioRef.current;
-    const sourceUrl = globalData.sources.get(musicId);
+    const rawSourceUrl = globalData.sources.get(musicId);
+    const sourceUrl = rawSourceUrl
+      ? proxiedAudioUrl(rawSourceUrl, window.location.origin)
+      : null;
     if (audio && sourceUrl && audio.getAttribute("src") === sourceUrl) {
+      primeAudioBoost();
       audio.play().catch((error: unknown) => {
         if ((error as DOMException | null)?.name !== "AbortError") {
           console.log("Playback was blocked:", error);
         }
       });
     }
-  }, [globalData, musicAllowed, syncCharacterForMusic]);
+  }, [globalData, musicAllowed, syncCharacterForMusic, primeAudioBoost]);
 
   /** Pauses without marking the track stopped, so a later play resumes where it left off. */
   const pauseForGame = useCallback(() => {
@@ -370,6 +396,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     for (let i = 0; i < ranges.length; i++) {
       playedDuration += ranges.end(i) - ranges.start(i);
     }
+    primeAudioBoost();
     audio.play()
       .then(() => {
         if (playedDuration < 0.02) {
@@ -380,7 +407,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
       .catch(reportPlaybackError);
     resetPauseTimeout();
     setPlaybackState(PlaybackState.Playing);
-  }, [resetPauseTimeout, setRandomPlaybackPosition]);
+  }, [primeAudioBoost, resetPauseTimeout, setRandomPlaybackPosition]);
 
   const handleAudioLoadedData = useCallback(() => {
     const { playbackState: state, playbackSetting: setting } = stateRef.current;
@@ -399,6 +426,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     if (setting.randomStartPosition) {
       setRandomPlaybackPosition();
     }
+    primeAudioBoost();
     audio.play()
       .then(() => {
         console.log("Audio loaded: Music started at ", Date.now());
@@ -407,7 +435,7 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
       .catch(reportPlaybackError);
     resetPauseTimeout();
     setPlaybackState(PlaybackState.Playing);
-  }, [resetPauseTimeout, setRandomPlaybackPosition]);
+  }, [primeAudioBoost, resetPauseTimeout, setRandomPlaybackPosition]);
 
   const handleAudioLoadedMetadata = useCallback(() => {
     if (audioRef.current) {
@@ -505,6 +533,8 @@ export function useMusicPlayer(options: MusicPlayerOptions): MusicPlayerStore {
     setPlaybackSetting,
     volume,
     setVolume,
+    audioBoostMode,
+    cycleAudioBoostMode,
     musicStartTimestamp,
     setNextSongPRNGSeed,
     inGame,

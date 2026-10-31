@@ -121,6 +121,38 @@ await send("Emulation.setDeviceMetricsOverride", {
   deviceScaleFactor: 1,
   mobile: false,
 });
+await send("Page.addScriptToEvaluateOnNewDocument", {
+  source: `(() => {
+    const probe = { gains: [], compressors: [], shapers: [], mediaSources: 0 };
+    window.__audioBoostProbe = probe;
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) { return; }
+    const proto = Ctor.prototype;
+    const createGain = proto.createGain;
+    proto.createGain = function (...args) {
+      const node = createGain.apply(this, args);
+      probe.gains.push(node);
+      return node;
+    };
+    const createCompressor = proto.createDynamicsCompressor;
+    proto.createDynamicsCompressor = function (...args) {
+      const node = createCompressor.apply(this, args);
+      probe.compressors.push(node);
+      return node;
+    };
+    const createShaper = proto.createWaveShaper;
+    proto.createWaveShaper = function (...args) {
+      const node = createShaper.apply(this, args);
+      probe.shapers.push(node);
+      return node;
+    };
+    const createMediaSource = proto.createMediaElementSource;
+    proto.createMediaElementSource = function (...args) {
+      probe.mediaSources++;
+      return createMediaSource.apply(this, args);
+    };
+  })();`,
+});
 currentPhase = "initial-load";
 await send("Page.navigate", { url: `${base}/?locale=zh&playlist-e2e=${Date.now()}` });
 await waitFor(`document.readyState === "complete" && document.body.innerText.includes("我的歌单")`);
@@ -128,6 +160,39 @@ currentPhase = "clear-and-reload";
 await evaluate(`localStorage.clear()`);
 await send("Page.reload", { ignoreCache: true });
 await waitFor(`document.readyState === "complete" && document.body.innerText.includes("我的歌单")`);
+
+const boostCycle = await evaluate(`(async () => {
+  const audio = document.querySelector("#audio-element");
+  audio.pause();
+  audio.muted = true;
+  const boostButton = () => [...document.querySelectorAll("button")]
+    .find((item) => item.textContent?.includes("音效："));
+  const initial = boostButton().textContent?.trim();
+  boostButton().click();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const normal = boostButton().textContent?.trim();
+  boostButton().click();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const off = boostButton().textContent?.trim();
+  boostButton().click();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  return {
+    initial,
+    normal,
+    off,
+    extreme: boostButton().textContent?.trim(),
+    stored: JSON.parse(localStorage.getItem("audioBoostMode")),
+    crossOrigin: audio.crossOrigin,
+    paused: audio.paused,
+    muted: audio.muted
+  };
+})()`);
+if (boostCycle.initial !== "音效：极限" || boostCycle.normal !== "音效：增强"
+  || boostCycle.off !== "音效：原声" || boostCycle.extreme !== "音效：极限"
+  || boostCycle.stored !== "extreme" || boostCycle.crossOrigin !== "anonymous"
+  || !boostCycle.paused || !boostCycle.muted) {
+  throw new Error(`audio boost cycle failed: ${JSON.stringify(boostCycle)}`);
+}
 
 const playlistName = `网站歌单 ${Date.now()}`;
 await openPlaylistManager();
@@ -314,6 +379,8 @@ const clickedOriginalSource = localMusicSources[clickedOriginalId];
 if (!clickedOriginalSource) {
   throw new Error(`original track has no playable source: ${clickedOriginalId}`);
 }
+const expectedProxiedSource =
+  `https://reliable-praline-07c51e.netlify.app/audio?url=${encodeURIComponent(clickedOriginalSource)}`;
 await evaluate(`(() => {
   const row = [...document.querySelectorAll('[data-testid="library-track-row"]')]
     .find((item) => item.dataset.musicId === ${JSON.stringify(clickedOriginalId)});
@@ -326,9 +393,33 @@ await waitFor(`(() => {
 })()`);
 await waitFor(`(() => {
   const audio = document.querySelector("#audio-element");
-  return audio && audio.getAttribute("src") === ${JSON.stringify(clickedOriginalSource)}
+  return audio && [${JSON.stringify(clickedOriginalSource)}, ${JSON.stringify(expectedProxiedSource)}]
+    .includes(audio.getAttribute("src"))
     && audio.currentTime > 0;
 })()`, 45000);
+
+const audioGraph = await evaluate(`(() => {
+  const audio = document.querySelector("#audio-element");
+  const probe = window.__audioBoostProbe;
+  audio.muted = true;
+  return {
+    src: audio.getAttribute("src"),
+    currentTime: audio.currentTime,
+    muted: audio.muted,
+    mediaSources: probe.mediaSources,
+    gains: probe.gains.map((node) => node.gain.value),
+    ratios: probe.compressors.map((node) => node.ratio.value),
+    shapers: probe.shapers.length
+  };
+})()`);
+if (!audioGraph.src?.startsWith("https://reliable-praline-07c51e.netlify.app/audio?url=")
+  || !audioGraph.muted || audioGraph.mediaSources !== 1
+  || Math.abs(audioGraph.gains[0] - 8) > 0.01
+  || Math.abs(audioGraph.gains[1] - 0.84) > 0.01
+  || Math.abs(audioGraph.gains[2] - 2) > 0.01
+  || !audioGraph.ratios.includes(20) || audioGraph.shapers < 1) {
+  throw new Error(`audio boost graph failed: ${JSON.stringify(audioGraph)}`);
+}
 
 const randomContext = await evaluate(`(() => {
   const store = JSON.parse(localStorage.getItem("card-player-playlists-v1"));
@@ -481,6 +572,8 @@ console.log(JSON.stringify({
   uniqueCharacters: playlistCharacters.size,
   playingOrder,
   selectedMusic,
+  boostCycle,
+  audioGraph,
   gameState: await evaluate(`document.querySelector("[data-game-state]").getAttribute("data-game-state")`),
   managerScreenshot,
   gameScreenshot,
